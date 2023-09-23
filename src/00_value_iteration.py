@@ -45,8 +45,17 @@ def bellman_operator(S, R, γ, V, s, a):
     )
 
 
-def transition_prob(s, a, s_prime):
-    """0% chance moving opposite direction, 33% change in any other. Can only move 1 cell."""
+def transition_prob(s, a, s_prime, obstacles=[]):
+    """0% chance moving opposite direction, 33% change in any other. Can only move 1 cell.
+    
+    Optional `obstacles` parameter allows you to consider the case when the agent
+    cannot visit certain cells because they contain obstacles.
+
+    With no obstacles, the optimal first action is Up. But, if you add a hole
+    at (0, 1) the new first action is correctly Right.
+    """
+    if s_prime in obstacles:
+        return 0.0
     dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
     if max(abs(dx), abs(dy), abs(dx) + abs(dy)) > 1:
         return 0.0
@@ -55,9 +64,9 @@ def transition_prob(s, a, s_prime):
     if a == 'Down':
         return float(dy != 1) / 3.0
     if a == 'Left':
-        return float(dy != 1) / 3.0
+        return float(dx != 1) / 3.0
     assert a == 'Right'
-    return float(dy != -1) / 3.0
+    return float(dx != -1) / 3.0
 
 
 if __name__ == '__main__':
@@ -83,3 +92,7 @@ if __name__ == '__main__':
     V_opt, n_iter = value_iteration(S, A, R, γ, V)
     print('Converged after', n_iter, 'iterations')
     print(V_opt)
+    print(
+        'Best first action:',
+        'Up' if V_opt[(0, 1)] > V_opt[(1, 0)] else 'Right'
+    )
