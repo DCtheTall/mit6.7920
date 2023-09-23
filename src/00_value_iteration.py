@@ -2,32 +2,25 @@
 Implementation of value iteration algorithm
 ===========================================
 
-Example (from Bard):
-Consider an agent that is trying to navigate a maze to reach a goal state.
-The agent can take two actions: Up or Down.
-The agent receives a reward of 1 for reaching the goal state,
-and a reward of 0 for all other states.
-The agent's transition probabilities are as follows:
-State   | Action   | Next State | Probability
-------- | -------- | ---------- | --------
-Start   | Up       | Room A     | 0.5
-Start   | Down     | Room B     | 0.5
-Room A  | Up       | Goal       | 0.25
-Room A  | Down     | Room B     | 0.75
-Room B  | Up       | Room A     | 0.25
-Room B  | Down     | Goal       | 0.75
-
 """
 
 import numpy as np
 
 
-def value_iteration(S, A, R, P, γ, V):
+def get_reward(s):
+    if s == (3, 3):
+        return 1.0
+    if s == (3, 2):
+        return -1.0
+    return 0.0
+
+
+def value_iteration(S, A, R, γ, V):
     """Value iteration algorithm implementation"""
     n_iter = 0
     while True:
         n_iter += 1
-        V_prime = update_value_function(S, A, R, P, γ, V)
+        V_prime = update_value_function(S, A, R, γ, V)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         else:
@@ -36,58 +29,57 @@ def value_iteration(S, A, R, P, γ, V):
 
 
 
-def update_value_function(S, A, R, P, γ, V):
+def update_value_function(S, A, R, γ, V):
     """One round of the value function update step"""
     return {
-        s: max(bellman_operator(S, R, P, γ, V, s, a) for a in A)
+        s: max(bellman_operator(S, R, γ, V, s, a) for a in A)
         for s in S
     }
 
 
-def bellman_operator(S, R, P, γ, V, s, a):
+def bellman_operator(S, R, γ, V, s, a):
     """Bellman operator for value iteration"""
     return R[s] + γ * sum(
-        transition_prob(P, s, a, s_prime) * V[s_prime]
+        transition_prob(s, a, s_prime) * V[s_prime]
         for s_prime in S
     )
 
 
-def transition_prob(P, s, a, s_prime):
-    """Get transition probability if specified, 0 otherwise"""
-    try:
-        return P[(s, a, s_prime)]
-    except KeyError:
+def transition_prob(s, a, s_prime):
+    """0% chance moving opposite direction, 33% change in any other. Can only move 1 cell."""
+    dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
+    if max(abs(dx), abs(dy), abs(dx) + abs(dy)) > 1:
         return 0.0
+    if a == 'Up':
+        return float(dy != -1) / 3.0
+    if a == 'Down':
+        return float(dy != 1) / 3.0
+    if a == 'Left':
+        return float(dy != 1) / 3.0
+    assert a == 'Right'
+    return float(dy != -1) / 3.0
 
 
 if __name__ == '__main__':
-    # Set of all states
-    S = {'Start', 'Room A', 'Room B', 'Goal'}
-
-    # Set of all actions
-    A = {'Up', 'Down'}
-
-    # State transition probabilities
-    # Keyed on: (old state, action, new state)
-    P = {
-        ('Start', 'Up', 'Room A'): 0.5,
-        ('Start', 'Down', 'Room B'): 0.5,
-        ('Room A', 'Up', 'Goal'): 0.25,
-        ('Room A', 'Down', 'Room B'): 0.75,
-        ('Room B', 'Up', 'Room A'): 0.25,
-        ('Room B', 'Down', 'Goal'): 0.75,
+    # Set of all states, 4x4 grid
+    S = {
+        (i // 4, i % 4)
+        for i in range(16)
     }
 
+    # Set of all actions
+    A = {'Up', 'Down', 'Left', 'Right'}
+
     # Rewards
-    R = {s: 1.0 if s == 'Goal' else 0.0 for s in S}
+    R = {s: get_reward(s) for s in S}
 
     # Initialize value function
     V = {s: 0.0 for s in S}
 
     # Discount factor
-    γ = 0.9
+    γ = 0.75
 
     # Print final value function
-    V_opt, n_iter = value_iteration(S, A, R, P, γ, V)
+    V_opt, n_iter = value_iteration(S, A, R, γ, V)
     print('Converged after', n_iter, 'iterations')
     print(V_opt)
