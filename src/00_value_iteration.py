@@ -16,7 +16,10 @@ def get_reward(s):
 
 
 def value_iteration(S, A, R, γ, V):
-    """Value iteration algorithm implementation"""
+    """Value iteration algorithm implementation
+    
+    Complexity: O(S^2 * A)
+    """
     n_iter = 0
     while True:
         n_iter += 1
@@ -30,7 +33,10 @@ def value_iteration(S, A, R, γ, V):
 
 
 def update_value_function(S, A, R, γ, V):
-    """One round of the value function update step"""
+    """One round of the value function update step
+    
+    Complexity: O(S^2 * A)
+    """
     return {
         s: max(bellman_operator(S, R, γ, V, s, a) for a in A)
         for s in S
@@ -38,7 +44,10 @@ def update_value_function(S, A, R, γ, V):
 
 
 def bellman_operator(S, R, γ, V, s, a):
-    """Bellman operator for value iteration"""
+    """Bellman operator for value iteration
+    
+    Complexity: O(S)
+    """
     return R[s] + γ * sum(
         transition_prob(s, a, s_prime) * V[s_prime]
         for s_prime in S
