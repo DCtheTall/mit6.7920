@@ -85,25 +85,24 @@ def next_state_stochastic(S, s, a):
     if s in {(3, 3), (3, 2)}:
         return s
     if (s, a) in T:
-        possible_next_states = T[(s, a)]
-    else:
-        possible_next_states = []
-        for s_prime in S:
-            dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-            if max(abs(dx), abs(dy)) > 1:
-                continue
-            if dx != 0 and dy != 0:
-                continue
-            if a == 'Left' and dx == 1:
-                continue
-            if a == 'Right' and dx == -1:
-                continue
-            if a == 'Up' and dy == -1:
-                continue
-            if a == 'Down' and dy == 1:
-                continue
-            possible_next_states.append(s_prime)
-        T[(s, a)] = possible_next_states
+        return random.sample(T[(s, a)], 1)[0]
+    possible_next_states = []
+    for s_prime in S:
+        dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
+        if max(abs(dx), abs(dy)) > 1:
+            continue
+        if dx != 0 and dy != 0:
+            continue
+        if a == 'Left' and dx == 1:
+            continue
+        if a == 'Right' and dx == -1:
+            continue
+        if a == 'Up' and dy == -1:
+            continue
+        if a == 'Down' and dy == 1:
+            continue
+        possible_next_states.append(s_prime)
+    T[(s, a)] = possible_next_states
     return random.sample(possible_next_states, 1)[0]
 
 
