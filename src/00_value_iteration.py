@@ -59,6 +59,8 @@ def transition_prob(s, a, s_prime):
     
     Can only move 1 cell at a time.
     """
+    if s == {(3, 3), (3, 2)}:
+        return 0.0
     dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
     if max(abs(dx), abs(dy), abs(dx) + abs(dy)) > 1:
         return 0.0

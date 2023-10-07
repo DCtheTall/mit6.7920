@@ -41,7 +41,7 @@ def temporal_difference_step(S, A, R, V, γ, η):
     π = greedy_policy(S, A, V)
     V_prime = {}
     for s in S:
-        s_prime = π[s]
+        s_prime = π.get(s, s)
         # Temporal difference update step
         V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
     return V_prime
@@ -55,11 +55,14 @@ def greedy_policy(S, A, V):
             s_prime = next_state(s, a)
             if s_prime != s:
                 next_states[s_prime] = V[s_prime]
-        π[s] = max(next_states, key=next_states.get)
+        if len(next_states) > 0:
+            π[s] = max(next_states, key=next_states.get)
     return π
 
 
 def next_state(s, a):
+    if s in {(3, 3), (3, 2)}:
+        return s
     if a == 'Up':
         return (s[0], min(s[1] + 1, 3))
     if a == 'Down':
