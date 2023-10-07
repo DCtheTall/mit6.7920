@@ -6,6 +6,7 @@ algorithm.
 
 """
 
+import random
 import numpy as np
 
 
@@ -41,7 +42,11 @@ def temporal_difference_step(S, A, R, V, γ, η):
     π = greedy_policy(S, A, V)
     V_prime = {}
     for s in S:
-        s_prime = π.get(s, s)
+        a = π.get(s, None)
+        if a is None:
+            s_prime = s
+        else:
+            s_prime = next_state_stochastic(S, s, a)
         # Temporal difference update step
         V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
     return V_prime
@@ -50,17 +55,17 @@ def temporal_difference_step(S, A, R, V, γ, η):
 def greedy_policy(S, A, V):
     π = {}
     for s in S:
-        next_states = {}
+        possible_actions = {}
         for a in A:
-            s_prime = next_state(s, a)
+            s_prime = next_state_deterministic(s, a)
             if s_prime != s:
-                next_states[s_prime] = V[s_prime]
-        if len(next_states) > 0:
-            π[s] = max(next_states, key=next_states.get)
+                possible_actions[a] = V[s_prime]
+        if len(possible_actions) > 0:
+            π[s] = max(possible_actions, key=possible_actions.get)
     return π
 
 
-def next_state(s, a):
+def next_state_deterministic(s, a):
     if s in {(3, 3), (3, 2)}:
         return s
     if a == 'Up':
@@ -72,6 +77,34 @@ def next_state(s, a):
     if a == 'Right':
         return (min(s[0] + 1, 3), s[1])
     raise ValueError(f'Unexpected action {a}')
+
+# Memoization table for table below
+T = {}
+
+def next_state_stochastic(S, s, a):
+    if s in {(3, 3), (3, 2)}:
+        return s
+    if (s, a) in T:
+        possible_next_states = T[(s, a)]
+    else:
+        possible_next_states = []
+        for s_prime in S:
+            dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
+            if max(abs(dx), abs(dy)) > 1:
+                continue
+            if dx != 0 and dy != 0:
+                continue
+            if a == 'Left' and dx == 1:
+                continue
+            if a == 'Right' and dx == -1:
+                continue
+            if a == 'Up' and dy == -1:
+                continue
+            if a == 'Down' and dy == 1:
+                continue
+            possible_next_states.append(s_prime)
+        T[(s, a)] = possible_next_states
+    return random.sample(possible_next_states, 1)[0]
 
 
 def temporal_difference(V, R, γ, s, s_prime):
