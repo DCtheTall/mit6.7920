@@ -69,7 +69,7 @@ def next_state_deterministic(s, a):
         return (min(s[0] + 1, 3), s[1])
     raise ValueError(f'Unexpected action {a}')
 
-# Memoization table for table below
+# Memoization table for function below
 T = {}
 
 def next_state_stochastic(S, s, a):
@@ -124,7 +124,3 @@ if __name__ == '__main__':
     # Display results
     print('Converged after', n_iter, 'iterations')
     print(V_opt)
-    print(
-        'Best first action:',
-        'Up' if V_opt[(0, 1)] > V_opt[(1, 0)] else 'Right'
-    )
