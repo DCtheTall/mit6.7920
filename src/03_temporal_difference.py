@@ -89,9 +89,7 @@ def next_state_stochastic(S, s, a):
     possible_next_states = []
     for s_prime in S:
         dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-        if max(abs(dx), abs(dy)) > 1:
-            continue
-        if dx != 0 and dy != 0:
+        if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
             continue
         if a == 'Left' and dx == 1:
             continue

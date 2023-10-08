@@ -7,6 +7,33 @@ Implementation of policy iteration algorithm
 import numpy as np
 
 
+def build_transition_probs(S, A):
+    """Build transition probability for 4x4 Frozen Lake MDP."""
+    P = {}
+    for s in S:
+        for a in A:
+            if s in {(3, 3), (3, 2)}:
+                P[(s, a, s)] = 1.0
+                continue
+            possible_next_states = []
+            for s_prime in S:
+                dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
+                if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
+                    continue
+                if a == 'Left' and dx == 1:
+                    continue
+                if a == 'Right' and dx == -1:
+                    continue
+                if a == 'Up' and dy == -1:
+                    continue
+                if a == 'Down' and dy == 1:
+                    continue
+                possible_next_states.append(s_prime)
+            for s_prime in possible_next_states:
+                P[(s, a, s_prime)] = 1.0 / len(possible_next_states)
+    return P
+
+
 def get_reward(s):
     if s == (3, 3):
         return 1.0
@@ -15,7 +42,7 @@ def get_reward(s):
     return 0.0
 
 
-def policy_iteration(S, R, γ, V, π, A):
+def policy_iteration(S, A, R, P, V, γ, π):
     """Value iteration algorithm implementation
     
     Complexity: O(S^2 * A)
@@ -24,24 +51,35 @@ def policy_iteration(S, R, γ, V, π, A):
     while True:
         n_iter += 1
         # Policy evaluation
-        V_prime = evaluate_policy(S, R, γ, V, π)
+        V_prime = evaluate_policy(S, R, P, V, γ, π)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
 
         # Policy improvement
-        π = update_policy(S, R, γ, V, A)
+        π = update_policy(S, A, R, P, V, γ)
     return V, π, n_iter
 
 
-def evaluate_policy(S, R, γ, V, π):
+def evaluate_policy(S, R, P, V, γ, π):
     return {
-        s: bellman_operator(S, R, γ, V, s, π[s])
+        s: bellman_operator(S, R, P, V, γ, s, π[s])
         for s in S
     }
 
 
-def update_policy(S, R, γ, V, A):
+def bellman_operator(S, R, P, V, γ, s, a):
+    """Bellman operator for value iteration
+    
+    Complexity: O(S)
+    """
+    return R[s] + γ * sum(
+        P.get((s, a, s_prime), 0) * V[s_prime]
+        for s_prime in S
+    )
+
+
+def update_policy(S, A, R, P, V, γ):
     """Update the policy using the newly computed value function, V
     
     π[s] = argmax(bellman_operator(R, γ, V, s, a) for a in A)
@@ -49,42 +87,11 @@ def update_policy(S, R, γ, V, A):
     π = {}
     for s in S:
         possible_actions = {
-            a: bellman_operator(S, R, γ, V, s, a)
+            a: bellman_operator(S, R, P, V, γ, s, a)
             for a in A
         }
         π[s] = max(possible_actions, key=possible_actions.get)
     return π
-
-
-def bellman_operator(S, R, γ, V, s, a):
-    """Bellman operator for value iteration
-    
-    Complexity: O(S)
-    """
-    return R[s] + γ * sum(
-        transition_prob(s, a, s_prime) * V[s_prime]
-        for s_prime in S
-    )
-
-
-def transition_prob(s, a, s_prime):
-    """0% chance moving opposite direction, 33% change in any other.
-    
-    Can only move 1 cell at a time.
-    """
-    if s == {(3, 3), (3, 2)}:
-        return 0.0
-    dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-    if max(abs(dx), abs(dy), abs(dx) + abs(dy)) > 1:
-        return 0.0
-    if a == 'Up':
-        return float(dy != -1) / 3.0
-    if a == 'Down':
-        return float(dy != 1) / 3.0
-    if a == 'Left':
-        return float(dx != 1) / 3.0
-    assert a == 'Right'
-    return float(dx != -1) / 3.0
 
 
 if __name__ == '__main__':
@@ -96,6 +103,9 @@ if __name__ == '__main__':
 
     # Set of all actions
     A = {'Up', 'Down', 'Left', 'Right'}
+
+    # Transition probabiltiy table
+    P = build_transition_probs(S, A)
 
     # Rewards
     R = {s: get_reward(s) for s in S}
@@ -110,7 +120,7 @@ if __name__ == '__main__':
     π = {s: 'Right' for s in S}
 
     # Apply policy iteration
-    V_opt, π_opt, n_iter = policy_iteration(S, R, γ, V, π, A)
+    V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, V, γ, π)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
