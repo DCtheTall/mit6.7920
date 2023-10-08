@@ -10,14 +10,6 @@ import random
 import numpy as np
 
 
-def get_reward(s):
-    if s == (3, 3):
-        return 1.0
-    if s == (3, 2):
-        return -1.0
-    return 0.0
-
-
 def td0_estimator(S, A, R, V, γ):
     t = 0
     while True:
@@ -39,6 +31,7 @@ def learning_rate(t):
 
 
 def temporal_difference_step(S, A, R, V, γ, η):
+    """One step of iterative temporal difference (TD)"""
     π = random_policy(S, A)
     V_prime = {}
     for s in S:
@@ -46,33 +39,24 @@ def temporal_difference_step(S, A, R, V, γ, η):
         if a is None:
             s_prime = s
         else:
-            s_prime = next_state_stochastic(S, s, a)
+            s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
         V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
     return V_prime
 
 
 def random_policy(S, A):
+    """Use random policy to show TD{0} still converges"""
     return {s: random.sample(list(A), 1)[0] for s in S}
-
-
-def next_state_deterministic(s, a):
-    if s in {(3, 3), (3, 2)}:
-        return s
-    if a == 'Up':
-        return (s[0], min(s[1] + 1, 3))
-    if a == 'Down':
-        return (s[0], max(s[1] - 1, 0))
-    if a == 'Left':
-        return (max(s[0] - 1, 0), s[1])
-    if a == 'Right':
-        return (min(s[0] + 1, 3), s[1])
-    raise ValueError(f'Unexpected action {a}')
 
 # Memoization table for function below
 T = {}
 
-def next_state_stochastic(S, s, a):
+def sample_next_state(S, s, a):
+    """Sample next state from MDP
+    
+    TD(0) algorithm treats this as a black box.
+    """
     if s in {(3, 3), (3, 2)}:
         return s
     if (s, a) in T:
@@ -96,7 +80,8 @@ def next_state_stochastic(S, s, a):
 
 
 def temporal_difference(V, R, γ, s, s_prime):
-    return R[s] + γ * V[s_prime] - V[s]
+    """Compute temporal difference term in current step"""
+    return R.get(s, 0.0) + γ * V[s_prime] - V[s]
 
 
 if __name__ == '__main__':
@@ -110,7 +95,9 @@ if __name__ == '__main__':
     A = {'Up', 'Down', 'Left', 'Right'}
 
     # Rewards
-    R = {s: get_reward(s) for s in S}
+    # Upper right corner is the goal
+    # Lower right corner is a failure
+    R = {{3, 2}: -1.0, (3, 3): 1.0}
 
     # Initialize value function
     V = {s: 0.0 for s in S}
