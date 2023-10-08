@@ -97,7 +97,7 @@ if __name__ == '__main__':
     # Rewards
     # Upper right corner is the goal
     # Lower right corner is a failure
-    R = {{3, 2}: -1.0, (3, 3): 1.0}
+    R = {(3, 2): -1.0, (3, 3): 1.0}
 
     # Initialize value function
     V = {s: 0.0 for s in S}
