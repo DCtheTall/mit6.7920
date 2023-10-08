@@ -39,7 +39,7 @@ def learning_rate(t):
 
 
 def temporal_difference_step(S, A, R, V, γ, η):
-    π = greedy_policy(S, A, V)
+    π = random_policy(S, A)
     V_prime = {}
     for s in S:
         a = π.get(s, None)
@@ -52,17 +52,8 @@ def temporal_difference_step(S, A, R, V, γ, η):
     return V_prime
 
 
-def greedy_policy(S, A, V):
-    π = {}
-    for s in S:
-        possible_actions = {}
-        for a in A:
-            s_prime = next_state_deterministic(s, a)
-            if s_prime != s:
-                possible_actions[a] = V[s_prime]
-        if len(possible_actions) > 0:
-            π[s] = max(possible_actions, key=possible_actions.get)
-    return π
+def random_policy(S, A):
+    return {s: random.sample(list(A), 1)[0] for s in S}
 
 
 def next_state_deterministic(s, a):
