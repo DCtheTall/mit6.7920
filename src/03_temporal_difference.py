@@ -15,7 +15,7 @@ def td0_estimator(S, A, R, V, γ):
     while True:
         t += 1
         η = learning_rate(t)
-        V_prime = temporal_difference_step(S, A, R, V, γ, η)
+        V_prime = update_value_function(S, A, R, V, γ, η)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
@@ -30,7 +30,7 @@ def learning_rate(t):
     return 1.0 / t
 
 
-def temporal_difference_step(S, A, R, V, γ, η):
+def update_value_function(S, A, R, V, γ, η):
     """One step of iterative temporal difference (TD) learning"""
     π = random_policy(S, A)
     V_prime = {}
@@ -95,9 +95,7 @@ if __name__ == '__main__':
     A = {'Up', 'Down', 'Left', 'Right'}
 
     # Rewards
-    # Upper right corner is the goal
-    # Lower right corner is a failure
-    R = {(3, 2): -1.0, (3, 3): 1.0}
+    R = {(3, 3): 1.0, (3, 2): -1.0}
 
     # Initialize value function
     V = {s: 0.0 for s in S}

@@ -1,7 +1,7 @@
 """
 Implementation of TD(λ) with Elgibility Traces
 ==============================================
-TODO add eligibility trace
+Implments TD(λ) for 4x4 Frozen Lake MDP.
 
 """
 
@@ -17,7 +17,7 @@ def td_lambda(S, A, R, V, γ, λ):
     while True:
         t += 1
         η = learning_rate(t)
-        V_prime = temporal_difference_step(S, A, R, V, γ, λ, η)
+        V_prime = update_value_function(S, A, R, V, γ, λ, η)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
@@ -32,7 +32,7 @@ def learning_rate(t):
     return 1.0 / t
 
 
-def temporal_difference_step(S, A, R, V, γ, λ, η):
+def update_value_function(S, A, R, V, γ, λ, η):
     """One step of iterative temporal difference (TD) learning"""
     π = random_policy(S, A)
     V_prime = {}
@@ -125,15 +125,15 @@ if __name__ == '__main__':
 
     # Rewards
     # Upper right corner is the goal
-    # Lower right corner is a failure
-    R = {(3, 2): -1.0, (3, 3): 1.0}
+    # One cell below right corner is a failure
+    R = {(3, 3): 1.0, (3, 2): -1.0}
 
     # Initialize value function
     V = {s: 0.0 for s in S}
 
     # Discount factor
     γ = 0.75
-    λ = 0.5
+    λ = 0.6
 
     # Apply value iteration
     V_opt, n_iter = td_lambda(S, A, R, V, γ, λ)

@@ -34,14 +34,6 @@ def build_transition_probs(S, A):
     return P
 
 
-def get_reward(s):
-    if s == (3, 3):
-        return 1.0
-    if s == (3, 2):
-        return -1.0
-    return 0.0
-
-
 def policy_iteration(S, A, R, P, V, γ, π):
     """Value iteration algorithm implementation
     
@@ -73,7 +65,7 @@ def bellman_operator(S, R, P, V, γ, s, a):
     
     Complexity: O(S)
     """
-    return R[s] + γ * sum(
+    return R.get(s, 0.0) + γ * sum(
         P.get((s, a, s_prime), 0) * V[s_prime]
         for s_prime in S
     )
@@ -108,7 +100,7 @@ if __name__ == '__main__':
     P = build_transition_probs(S, A)
 
     # Rewards
-    R = {s: get_reward(s) for s in S}
+    R = {(3, 3): 1.0, (3, 2): -1.0}
 
     # Initialize value function
     V = {s: 0.0 for s in S}
