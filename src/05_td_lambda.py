@@ -1,7 +1,7 @@
 """
-Implementation of Incremental Monte Carlo
-=========================================
-Incremental Monte Carlo is also called TD(1).
+Implementation of TD(λ) with Elgibility Traces
+==============================================
+TODO add eligibility trace
 
 """
 
@@ -12,12 +12,12 @@ import random
 TERMINAL_NODES = {(3, 3), (3, 2)}
 
 
-def iterative_monte_carlo(S, A, R, V, γ):
+def td_lambda(S, A, R, V, γ, λ):
     t = 0
     while True:
         t += 1
         η = learning_rate(t)
-        V_prime = temporal_difference_step(S, A, R, V, γ, η)
+        V_prime = temporal_difference_step(S, A, R, V, γ, λ, η)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
@@ -32,7 +32,7 @@ def learning_rate(t):
     return 1.0 / t
 
 
-def temporal_difference_step(S, A, R, V, γ, η):
+def temporal_difference_step(S, A, R, V, γ, λ, η):
     """One step of iterative temporal difference (TD) learning"""
     π = random_policy(S, A)
     V_prime = {}
@@ -43,7 +43,7 @@ def temporal_difference_step(S, A, R, V, γ, η):
         else:
             s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
-        V_prime[s] = V[s] + η * episode_update(V, R, γ, π, s, s_prime)
+        V_prime[s] = V[s] + η * episode_update(V, R, γ, λ, π, s, s_prime)
     return V_prime
 
 
@@ -82,7 +82,7 @@ def sample_next_state(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def episode_update(V, R, γ, π, s, s_prime, T=100):
+def episode_update(V, R, γ, λ, π, s, s_prime, T=100):
     discount = 1.0
     ret = 0.0
     for _ in range(T):
@@ -92,7 +92,7 @@ def episode_update(V, R, γ, π, s, s_prime, T=100):
         s = s_prime
         a = π[s]
         s_prime = sample_next_state(S, s, a)
-        discount *= γ
+        discount *= γ * λ
     return ret
 
 
@@ -121,9 +121,10 @@ if __name__ == '__main__':
 
     # Discount factor
     γ = 0.75
+    λ = 0.5
 
     # Apply value iteration
-    V_opt, n_iter = iterative_monte_carlo(S, A, R, V, γ)
+    V_opt, n_iter = td_lambda(S, A, R, V, γ, λ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
