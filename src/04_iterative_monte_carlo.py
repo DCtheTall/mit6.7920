@@ -1,8 +1,7 @@
 """
-Implementation of Temporal Difference Learning
-==============================================
-This module implements the TD(0) temporal difference learning
-algorithm.
+Implementation of Incremental Monte Carlo
+=========================================
+Incremental Monte Carlo is also called TD(1).
 
 """
 
@@ -10,7 +9,10 @@ import numpy as np
 import random
 
 
-def td0_estimator(S, A, R, V, γ):
+TERMINAL_NODES = {(3, 3), (3, 2)}
+
+
+def iterative_monte_carlo(S, A, R, V, γ):
     t = 0
     while True:
         t += 1
@@ -41,7 +43,7 @@ def temporal_difference_step(S, A, R, V, γ, η):
         else:
             s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
-        V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
+        V_prime[s] = V[s] + η * monte_carlo_update(V, R, γ, π, s, s_prime)
     return V_prime
 
 
@@ -49,13 +51,14 @@ def random_policy(S, A):
     """Use random policy to show TD{0} still converges"""
     return {s: random.sample(list(A), 1)[0] for s in S}
 
+
 # Memoization table for function below
 T = {}
 
 def sample_next_state(S, s, a):
     """Sample next state from MDP
     
-    TD(0) algorithm treats this as a black box.
+    TD(1) algorithm treats this as a black box.
     """
     if s in {(3, 3), (3, 2)}:
         return s
@@ -77,6 +80,20 @@ def sample_next_state(S, s, a):
         possible_next_states.append(s_prime)
     T[(s, a)] = possible_next_states
     return random.sample(possible_next_states, 1)[0]
+
+
+def monte_carlo_update(V, R, γ, π, s, s_prime, T=100):
+    discount = 1.0
+    ret = 0.0
+    for _ in range(T):
+        ret += discount * temporal_difference(V, R, γ, s, s_prime)
+        if s_prime in TERMINAL_NODES:
+            break
+        s = s_prime
+        a = π[s]
+        s_prime = sample_next_state(S, s, a)
+        discount *= γ
+    return ret
 
 
 def temporal_difference(V, R, γ, s, s_prime):
@@ -106,7 +123,7 @@ if __name__ == '__main__':
     γ = 0.75
 
     # Apply value iteration
-    V_opt, n_iter = td0_estimator(S, A, R, V, γ)
+    V_opt, n_iter = iterative_monte_carlo(S, A, R, V, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
