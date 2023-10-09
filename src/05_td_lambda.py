@@ -36,6 +36,8 @@ def temporal_difference_step(S, A, R, V, γ, λ, η):
     """One step of iterative temporal difference (TD) learning"""
     π = random_policy(S, A)
     V_prime = {}
+    # Eligibility traces
+    z = {s: 0.0 for s in S}
     for s in S:
         a = π.get(s, None)
         if a is None:
@@ -43,7 +45,8 @@ def temporal_difference_step(S, A, R, V, γ, λ, η):
         else:
             s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
-        V_prime[s] = V[s] + η * episode_update(V, R, γ, λ, π, s, s_prime)
+        dt = episode_update(V, R, γ, λ, π, s, s_prime, z)
+        V_prime[s] = V[s] + η * z[s] * dt
     return V_prime
 
 
@@ -82,11 +85,12 @@ def sample_next_state(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def episode_update(V, R, γ, λ, π, s, s_prime, T=100):
+def episode_update(V, R, γ, λ, π, s, s_prime, z, T=100):
     discount = 1.0
     ret = 0.0
     for _ in range(T):
         ret += discount * temporal_difference(V, R, γ, s, s_prime)
+        update_eligibility_trace(S, s, z, γ, λ)
         if s_prime in TERMINAL_NODES:
             break
         s = s_prime
@@ -94,6 +98,14 @@ def episode_update(V, R, γ, λ, π, s, s_prime, T=100):
         s_prime = sample_next_state(S, s, a)
         discount *= γ * λ
     return ret
+
+
+def update_eligibility_trace(S, s, z, γ, λ):
+    for s_z in S:
+        if s == s_z:
+            z[s] = 1.0 + γ * λ * z[s]
+        else:
+            z[s_z] = γ * λ * z[s_z]
 
 
 def temporal_difference(V, R, γ, s, s_prime):
