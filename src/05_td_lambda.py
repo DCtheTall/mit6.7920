@@ -39,11 +39,8 @@ def update_value_function(S, A, R, V, γ, λ, η):
     # Eligibility traces
     z = {s: 0.0 for s in S}
     for s in S:
-        a = π.get(s, None)
-        if a is None:
-            s_prime = s
-        else:
-            s_prime = sample_next_state(S, s, a)
+        a = π[s]
+        s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
         dt = episode_update(V, R, γ, λ, π, s, s_prime, z)
         V_prime[s] = V[s] + η * z[s] * dt
@@ -135,7 +132,7 @@ if __name__ == '__main__':
     γ = 0.75
     λ = 0.6
 
-    # Apply value iteration
+    # Apply TD(λ) iteration
     V_opt, n_iter = td_lambda(S, A, R, V, γ, λ)
 
     # Display results

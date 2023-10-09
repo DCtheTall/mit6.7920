@@ -1,25 +1,24 @@
 """
-Implementation of Temporal Difference Learning
-==============================================
-This module implements the TD(0) temporal difference learning
-algorithm.
+Implementation of State-Action-Reward-State-Action (SARSA)
+==========================================================
 
 """
 
-import numpy as np
 import random
+import numpy as np
 
 
-def td0_estimator(S, A, R, V, γ):
+def sarsa(S, A, R, Q, γ):
     t = 0
     while True:
         t += 1
         η = learning_rate(t)
-        V_prime = update_value_function(S, A, R, V, γ, η)
-        if all(np.isclose(V[s], V_prime[s]) for s in S):
+        π = softmax_policy(S, A, Q, τ=1.0)
+        Q_prime = update_q_function(S, R, Q, π, γ, η)
+        if all(np.isclose(Q[(s, π[s])], Q_prime[(s, π[s])]) for s in S):
             break
-        V = V_prime
-    return V, t
+        Q.update(Q_prime)
+    return Q, t
 
 
 def learning_rate(t):
@@ -30,21 +29,28 @@ def learning_rate(t):
     return 1.0 / t
 
 
-def update_value_function(S, A, R, V, γ, η):
+def update_q_function(S, R, Q, π, γ, η):
     """One step of iterative temporal difference (TD) learning"""
-    π = random_policy(S, A)
-    V_prime = {}
+    Q_prime = {}
     for s in S:
-        a = π[s]
-        s_prime = sample_next_state(S, s, a)
+        s_prime = sample_next_state(S, s, π[s])
         # Temporal difference update step
-        V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
-    return V_prime
+        Q_prime[(s, π[s])] = Q[(s, π[s])] + η * temporal_difference(Q, R, γ, π, s, s_prime)
+    return Q_prime
 
 
-def random_policy(S, A):
-    """Use random policy to show TD{0} still converges"""
-    return {s: random.sample(list(A), 1)[0] for s in S}
+def softmax_policy(S, A, Q, τ):
+    """Softmax-based exploration policy"""
+    π = {}
+    for s in S:
+        numerators = {}
+        for a in A:
+            numerators[a] = np.exp(Q[(s, a)] / τ)
+        denom = sum(numerators.values())
+        A_ordered = numerators.keys()
+        p = [numerators[a] / denom for a in A_ordered]
+        π[s] = np.random.choice(list(A_ordered), 1, p=p)[0]
+    return π
 
 
 # Memoization table for function below
@@ -77,9 +83,9 @@ def sample_next_state(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def temporal_difference(V, R, γ, s, s_prime):
+def temporal_difference(Q, R, γ, π, s, s_prime):
     """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * V[s_prime] - V[s]
+    return R.get(s, 0.0) + γ * Q[(s_prime, π[s_prime])] - Q[(s, π[s])]
 
 
 if __name__ == '__main__':
@@ -95,15 +101,16 @@ if __name__ == '__main__':
     # Rewards
     R = {(3, 3): 1.0, (3, 2): -1.0}
 
-    # Initialize value function
-    V = {s: 0.0 for s in S}
+    # Initialize Q function
+    Q = {(s, a): 0.0 for s in S for a in A}
 
     # Discount factor
     γ = 0.75
 
-    # Apply TD(0) iteration
-    V_opt, n_iter = td0_estimator(S, A, R, V, γ)
+    # Apply SARSA
+    Q_opt, n_iter = sarsa(S, A, R, Q, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
-    print(V_opt)
+    print(Q_opt)
+    print('Best first action:', max(list(A), key=lambda a: Q[((0, 0), a)]))

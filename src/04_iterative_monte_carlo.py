@@ -37,11 +37,8 @@ def update_value_function(S, A, R, V, γ, η):
     π = random_policy(S, A)
     V_prime = {}
     for s in S:
-        a = π.get(s, None)
-        if a is None:
-            s_prime = s
-        else:
-            s_prime = sample_next_state(S, s, a)
+        a = π[s]
+        s_prime = sample_next_state(S, s, a)
         # Temporal difference update step
         V_prime[s] = V[s] + η * episode_update(V, R, γ, π, s, s_prime)
     return V_prime
@@ -122,7 +119,7 @@ if __name__ == '__main__':
     # Discount factor
     γ = 0.75
 
-    # Apply value iteration
+    # Apply TD(1) iteration
     V_opt, n_iter = iterative_monte_carlo(S, A, R, V, γ)
 
     # Display results
