@@ -103,15 +103,15 @@ def take_action(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def temporal_difference(Q, R, γ, s, a, s_prime, a_prime):
-    """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * Q[(s_prime, a_prime)] - Q[(s, a)]
-
-
 def select_action(Q, A, s):
     """Select action by maximizing the Q value"""
     Q_values = {a: Q[(s, a)] for a in A}
     return max(Q_values, key=Q_values.get)
+
+
+def temporal_difference(Q, R, γ, s, a, s_prime, a_prime):
+    """Compute temporal difference term in current step"""
+    return R.get(s, 0.0) + γ * Q[(s_prime, a_prime)] - Q[(s, a)]
 
 
 if __name__ == '__main__':
