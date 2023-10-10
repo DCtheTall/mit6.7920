@@ -8,17 +8,56 @@ import random
 import numpy as np
 
 
+TERMINAL_NODES = {(3, 3), (3, 2)}
+
+
 def sarsa(S, A, R, Q, γ):
     t = 0
+    N = {s: 0.0 for s in S}
     while True:
         t += 1
-        η = learning_rate(t)
-        π = softmax_policy(S, A, Q, τ=1.0)
-        Q_prime = update_q_function(S, R, Q, π, γ, η)
-        if all(np.isclose(Q[(s, π[s])], Q_prime[(s, π[s])]) for s in S):
+        π = greedy_softmax_policy(S, A, Q, τ=1.0)
+        Q_prime = update_q_function(S, R, Q, N, π, γ)
+        if all(np.isclose(Q[(s, a)], Q_prime[(s, a)]) for s in S for a in A):
             break
         Q.update(Q_prime)
     return Q, t
+
+
+def greedy_softmax_policy(S, A, Q, τ):
+    """Softmax-based exploration policy"""
+    p = {}
+    A_ordered = list(A)
+    for s in S:
+        numerators = {}
+        for a in A:
+            numerators[a] = np.exp(Q[(s, a)] / τ)
+        denom = sum(numerators.values())
+        p[s] = [numerators[a] / denom for a in A_ordered]
+    def π(s):
+        assert s in S
+        return np.random.choice(A_ordered, 1, p=p[s])[0]
+    return π
+
+
+def update_q_function(S, R, Q, N, π, γ, T=100):
+    """One step of iterative temporal difference (TD) learning"""
+    Q = Q.copy()
+    s = (0, 0)
+    for _ in range(T):
+        # Update learning rate
+        N[s] += 1.0
+        η = learning_rate(N[s])
+
+        # Take action
+        s_prime = sample_next_state(S, s, π(s))
+
+        # Temporal difference update step
+        Q[(s, π(s))] = Q[(s, π(s))] + η * temporal_difference(Q, R, γ, π, s, s_prime)
+        if s in TERMINAL_NODES:
+            break
+        s = s_prime
+    return Q
 
 
 def learning_rate(t):
@@ -27,30 +66,6 @@ def learning_rate(t):
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t
-
-
-def update_q_function(S, R, Q, π, γ, η):
-    """One step of iterative temporal difference (TD) learning"""
-    Q_prime = {}
-    for s in S:
-        s_prime = sample_next_state(S, s, π[s])
-        # Temporal difference update step
-        Q_prime[(s, π[s])] = Q[(s, π[s])] + η * temporal_difference(Q, R, γ, π, s, s_prime)
-    return Q_prime
-
-
-def softmax_policy(S, A, Q, τ):
-    """Softmax-based exploration policy"""
-    π = {}
-    for s in S:
-        numerators = {}
-        for a in A:
-            numerators[a] = np.exp(Q[(s, a)] / τ)
-        denom = sum(numerators.values())
-        A_ordered = numerators.keys()
-        p = [numerators[a] / denom for a in A_ordered]
-        π[s] = np.random.choice(list(A_ordered), 1, p=p)[0]
-    return π
 
 
 # Memoization table for function below
@@ -85,7 +100,7 @@ def sample_next_state(S, s, a):
 
 def temporal_difference(Q, R, γ, π, s, s_prime):
     """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * Q[(s_prime, π[s_prime])] - Q[(s, π[s])]
+    return R.get(s, 0.0) + γ * Q[(s_prime, π(s_prime))] - Q[(s, π(s))]
 
 
 if __name__ == '__main__':

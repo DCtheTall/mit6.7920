@@ -10,16 +10,51 @@ import numpy as np
 import random
 
 
+TERMINAL_NODES = {(3, 3), (3, 2)}
+
+
 def td0_estimator(S, A, R, V, γ):
-    t = 0
+    N = {s: 0.0 for s in S}
+    π = random_policy(S, A)
+    n_iter = 0
     while True:
-        t += 1
-        η = learning_rate(t)
-        V_prime = update_value_function(S, A, R, V, γ, η)
+        n_iter += 1
+        V_prime = update_value_function(S, R, V, N, π, γ)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
-    return V, t
+    return V, n_iter
+
+
+def random_policy(S, A):
+    """Use random policy to show TD{0} still converges"""
+    def π(s):
+        assert s in S
+        return random.sample(list(A), k=1)[0]
+    return π
+
+
+def update_value_function(S, R, V, N, π, γ, T=100):
+    """One step of iterative temporal difference (TD) learning"""
+    V = V.copy()
+    s = (0, 0)
+    for _ in range(T):
+        # Update per-stat learning rate
+        N[s] += 1.0
+        η = learning_rate(N[s])
+
+        # Take action
+        a = π(s)
+        s_prime = sample_next_state(S, s, a)
+
+        # Temporal difference update step
+        V[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
+
+        # Stop if reached terminal node
+        if s in TERMINAL_NODES:
+            break
+        s = s_prime
+    return V
 
 
 def learning_rate(t):
@@ -28,23 +63,6 @@ def learning_rate(t):
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t
-
-
-def update_value_function(S, A, R, V, γ, η):
-    """One step of iterative temporal difference (TD) learning"""
-    π = random_policy(S, A)
-    V_prime = {}
-    for s in S:
-        a = π[s]
-        s_prime = sample_next_state(S, s, a)
-        # Temporal difference update step
-        V_prime[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
-    return V_prime
-
-
-def random_policy(S, A):
-    """Use random policy to show TD{0} still converges"""
-    return {s: random.sample(list(A), 1)[0] for s in S}
 
 
 # Memoization table for function below
