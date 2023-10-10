@@ -2,7 +2,11 @@
 Implementation of Q-Learning
 ============================
 Q-Learning is an algorithm similar to SARSA except
-that it is an off-policy algorithm.
+that it is an off-policy algorithm. Meaning it does
+not use the exploration policy during the temporal
+difference learning step. Instead it selects the next
+state's action by picking the action leading to
+the largest Q-value.
 
 """
 
