@@ -44,14 +44,14 @@ def learning_rate(t):
 
 
 def update_value_function(S, R, V, N, π, γ, λ, η, T=100):
-    """One step of iterative temporal difference (TD) learning"""
+    """One episode of iterative temporal difference (TD) learning"""
     V = V.copy()
     s = (0, 0)
     # Eligibility traces
     z = {s: 0.0 for s in S}
     for _ in range(T):
         a = π(s)
-        s_prime = sample_next_state(S, s, a)
+        s_prime = take_action(S, s, a)
         z[s] += 1.0
         for sx in S:
             # Temporal difference update step
@@ -66,7 +66,7 @@ def update_value_function(S, R, V, N, π, γ, λ, η, T=100):
 # Memoization table for function below
 T = {}
 
-def sample_next_state(S, s, a):
+def take_action(S, s, a):
     """Sample next state from MDP
     
     TD(1) algorithm treats this as a black box.
@@ -91,21 +91,6 @@ def sample_next_state(S, s, a):
         possible_next_states.append(s_prime)
     T[(s, a)] = possible_next_states
     return random.sample(possible_next_states, 1)[0]
-
-
-def episode_update(V, R, γ, λ, π, s, s_prime, z, T=100):
-    discount = 1.0
-    ret = 0.0
-    for _ in range(T):
-        ret += discount * temporal_difference(V, R, γ, s, s_prime)
-        update_eligibility_trace(S, s, z, γ, λ)
-        if s_prime in TERMINAL_NODES:
-            break
-        s = s_prime
-        a = π(s)
-        s_prime = sample_next_state(S, s, a)
-        discount *= γ * λ
-    return ret
 
 
 def update_eligibility_trace(S, s, z, γ, λ):

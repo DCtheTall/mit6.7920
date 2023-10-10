@@ -1,6 +1,13 @@
 """
 Implementation of State-Action-Reward-State-Action (SARSA)
 ==========================================================
+SARSA is equivalent to the TD(0) algorithm in this repository
+except it uses state-action (Q) values, instead of a value function
+depending only on state.
+
+SARSA is an on-policy learning algorithm, meaning that it uses the
+same policy during exploration as it does for selecting the next
+action for temporal distance learning.
 
 """
 
@@ -41,19 +48,22 @@ def greedy_softmax_policy(S, A, Q, τ):
 
 
 def update_q_function(S, R, Q, N, π, γ, T=100):
-    """One step of iterative temporal difference (TD) learning"""
+    """One episode of iterative temporal difference (TD) learning"""
     Q = Q.copy()
     s = (0, 0)
+    a_prime = π(s)
     for _ in range(T):
         # Update learning rate
         N[s] += 1.0
         η = learning_rate(N[s])
 
         # Take action
-        s_prime = sample_next_state(S, s, π(s))
+        a = a_prime
+        s_prime = take_action(S, s, a)
 
         # Temporal difference update step
-        Q[(s, π(s))] = Q[(s, π(s))] + η * temporal_difference(Q, R, γ, π, s, s_prime)
+        a_prime = π(s_prime)
+        Q[(s, a)] = Q[(s, a)] + η * temporal_difference(Q, R, γ, s, a, s_prime, a_prime)
         if s in TERMINAL_NODES:
             break
         s = s_prime
@@ -71,7 +81,7 @@ def learning_rate(t):
 # Memoization table for function below
 T = {}
 
-def sample_next_state(S, s, a):
+def take_action(S, s, a):
     """Sample next state from MDP
     
     TD(0) algorithm treats this as a black box.
@@ -98,9 +108,9 @@ def sample_next_state(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def temporal_difference(Q, R, γ, π, s, s_prime):
+def temporal_difference(Q, R, γ, s, a, s_prime, a_prime):
     """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * Q[(s_prime, π(s_prime))] - Q[(s, π(s))]
+    return R.get(s, 0.0) + γ * Q[(s_prime, a_prime)] - Q[(s, a)]
 
 
 if __name__ == '__main__':
