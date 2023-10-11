@@ -15,12 +15,12 @@ TERMINAL_NODES = {(3, 3), (3, 2)}
 
 def td_lambda(S, A, R, V, γ, λ):
     π = random_policy(S, A)
-    N = {s: 0.0 for s in S}
+    # State update counter, used for learning rate
+    N = {}
     t = 0
     while True:
         t += 1
-        η = learning_rate(t)
-        V_prime = update_value_function(S, R, V, N, π, γ, λ, η)
+        V_prime = update_value_function(S, R, V, N, π, γ, λ)
         if all(np.isclose(V[s], V_prime[s]) for s in S):
             break
         V = V_prime
@@ -43,18 +43,20 @@ def learning_rate(t):
     return 1.0 / t
 
 
-def update_value_function(S, R, V, N, π, γ, λ, η, T=100):
+def update_value_function(S, R, V, N, π, γ, λ, T=100):
     """One episode of iterative temporal difference (TD) learning"""
     V = V.copy()
     s = (0, 0)
     # Eligibility traces
-    z = {s: 0.0 for s in S}
+    z = {}
     for _ in range(T):
         a = π(s)
         s_prime = take_action(S, s, a)
-        z[s] += 1.0
-        for sx in S:
+        z[s] = z.get(s, 0.0) + 1.0
+        for sx in z.keys():
             # Temporal difference update step
+            N[sx] = N.get(sx, 0) + 1
+            η = learning_rate(N[sx])
             V[sx] = V[sx] + η * z[sx] * temporal_difference(V, R, γ, s, s_prime)
             z[sx] *= λ * γ
         if s in TERMINAL_NODES:
