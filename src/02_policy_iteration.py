@@ -49,7 +49,7 @@ def policy_iteration(S, A, R, P, V, γ, π):
         V = V_prime
 
         # Policy improvement
-        π = update_policy(S, A, R, P, V, γ)
+        π = optimal_bellman_operator_policy(S, A, R, P, V, γ)
     return V, π, n_iter
 
 
@@ -71,7 +71,7 @@ def bellman_operator(S, R, P, V, γ, s, a):
     )
 
 
-def update_policy(S, A, R, P, V, γ):
+def optimal_bellman_operator_policy(S, A, R, P, V, γ):
     """Update the policy using the newly computed value function, V
     
     π[s] = argmax(bellman_operator(R, γ, V, s, a) for a in A)
@@ -84,6 +84,11 @@ def update_policy(S, A, R, P, V, γ):
         }
         π[s] = max(possible_actions, key=possible_actions.get)
     return π
+
+
+def print_grid(X):
+    for y in range(3, -1, -1):
+        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':
@@ -117,8 +122,8 @@ if __name__ == '__main__':
     # Display results
     print('Converged after', n_iter, 'iterations')
     print('Optimal value function:')
-    print(V_opt)
+    print_grid(V_opt)
     print('Optimal policy:')
-    print(π_opt)
+    print_grid(π_opt)
     print('Best first action:', π_opt[(0, 0)])
 

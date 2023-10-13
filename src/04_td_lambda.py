@@ -108,6 +108,11 @@ def temporal_difference(V, R, γ, s, s_prime):
     return R.get(s, 0.0) + γ * V[s_prime] - V[s]
 
 
+def print_grid(X):
+    for y in range(3, -1, -1):
+        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
+
+
 if __name__ == '__main__':
     # Set of all states, 4x4 grid
     S = {
@@ -135,4 +140,5 @@ if __name__ == '__main__':
 
     # Display results
     print('Converged after', n_iter, 'iterations')
-    print(V_opt)
+    print('Optimal value function:')
+    print_grid(V_opt)

@@ -109,13 +109,21 @@ def take_action(S, s, a):
 
 def select_action(Q, A, s):
     """Select action by maximizing the Q value"""
-    Q_values = {a: Q[(s, a)] for a in A}
-    return max(Q_values, key=Q_values.get)
+    return max(A, key=lambda a: Q[(s, a)])
 
 
 def temporal_difference(Q, R, γ, s, a, s_prime, a_prime):
     """Compute temporal difference term in current step"""
     return R.get(s, 0.0) + γ * Q[(s_prime, a_prime)] - Q[(s, a)]
+
+
+def optimal_policy(S, A, Q):
+    return {s: select_action(Q, A, s) for s in S}
+
+
+def print_grid(X):
+    for y in range(3, -1, -1):
+        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':
@@ -140,7 +148,11 @@ if __name__ == '__main__':
     # Apply SARSA
     Q_opt, n_iter = q_learning(S, A, R, Q, γ)
 
+    # Optimal policy
+    π_opt = optimal_policy(S, A, Q)
+
     # Display results
     print('Converged after', n_iter, 'iterations')
-    print(Q_opt)
-    print('Best first action:', max(list(A), key=lambda a: Q[((0, 0), a)]))
+    print('Optimal policy:')
+    print_grid(π_opt)
+    print('Best first action:', π_opt[(0, 0)])
