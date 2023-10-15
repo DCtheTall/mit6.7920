@@ -1,6 +1,6 @@
 """
-Implementation of Linear Temporal Difference Learning
-=====================================================
+Implementation of Incremental Least Squares Temporal Difference (iLSTD) Learning
+================================================================================
 
 """
 
@@ -30,13 +30,13 @@ def initialize_parameters():
     return np.zeros((D_MODEL,))
 
 
-def linear_td(S, A, R, V, γ, θ, ϕ):
+def ilstd(S, A, R, V, γ, λ, θ, ϕ):
     N = {s: 0.0 for s in S}
     π = random_policy(S, A)
     n_iter = 0
     while True:
         n_iter += 1
-        θ_prime = update_value_function(S, R, V, N, π, γ, θ, ϕ)
+        θ_prime = update_value_function(S, R, V, N, π, γ, λ, θ, ϕ)
         if all(np.isclose(a, b) for a, b in zip(θ, θ_prime)):
             break
         θ = θ_prime
@@ -51,20 +51,26 @@ def random_policy(S, A):
     return π
 
 
-def update_value_function(S, R, V, N, π, γ, θ, ϕ, T=100):
+def update_value_function(S, R, V, N, π, γ, λ, θ, ϕ, T=100):
     θ = θ.copy()
     s = (0, 0)
+    z = {}
     for _ in range(T):
         # Update per-stat learning rate
         N[s] += 1.0
-        η = learning_rate(N[s])
 
         # Take action
         a = π(s)
         s_prime = take_action(S, s, a)
 
-        # Temporal difference update step
-        θ -= η * linear_td_update(V, R, γ, θ, ϕ, s, s_prime)
+        z[s] = z.get(s, 0.0) + 1.0
+
+        # TD(λ) update step using LSTD update
+        for sx in z.keys():
+            N[sx] = N.get(sx, 0) + 1
+            η = learning_rate(N[sx])
+            θ += η * z[sx] * temporal_difference(V, R, γ, θ, s, s_prime) * ϕ[sx]
+            z[sx] *= λ * γ
 
         # Stop if reached terminal node
         if s in TERMINAL_NODES:
@@ -111,8 +117,8 @@ def take_action(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def linear_td_update(V, R, γ, θ, ϕ, s, s_prime):
-    return (V(θ, s) - R.get(s, 0) - γ * V(θ, s_prime)) * ϕ[s]
+def temporal_difference(V, R, γ, θ, s, s_prime):
+    return R.get(s, 0.0) + γ * V(θ, s_prime) - V(θ, s)
 
 
 def print_grid(X):
@@ -145,9 +151,10 @@ if __name__ == '__main__':
 
     # Discount factor
     γ = 0.75
+    λ = 0.6
 
     # Approximate value function with linear TD
-    θ_opt, n_iter = linear_td(S, A, R, V, γ, θ, ϕ)
+    θ_opt, n_iter = ilstd(S, A, R, V, γ, λ, θ, ϕ)
     V_opt = {s: V(θ_opt, s) for s in S}
 
     # Display results
