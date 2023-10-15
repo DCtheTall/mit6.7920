@@ -1,8 +1,6 @@
 """
-Implementation of Temporal Difference Learning
-==============================================
-This module implements the TD(0) temporal difference learning
-algorithm.
+Implementation of Linear Temporal Difference Learning
+=====================================================
 
 """
 
@@ -10,20 +8,39 @@ import numpy as np
 import random
 
 
+D_MODEL = 5
 TERMINAL_NODES = {(3, 3), (3, 2)}
 
 
-def td0_estimator(S, A, R, V, γ):
+def features(S):
+    """Extract features for linear TD"""
+    ϕ = {}
+    for s in S:
+        x, y = s
+        ϕ[s] = np.array([
+            float(x), float(y), # position
+            float(s in TERMINAL_NODES), # if terminal
+            ((x - 3) ** 2 + (y - 3) ** 2) ** 0.5, # L2 distance from goal
+            ((x - 3) ** 2 + (y - 2) ** 2) ** 0.5, # L2 distance from failure
+        ], dtype=np.float32)
+    return ϕ
+
+
+def initialize_parameters():
+    return np.zeros((D_MODEL,))
+
+
+def linear_td(S, A, R, V, γ, θ, ϕ):
     N = {s: 0.0 for s in S}
     π = random_policy(S, A)
     n_iter = 0
     while True:
         n_iter += 1
-        V_prime = update_value_function(S, R, V, N, π, γ)
-        if all(np.isclose(V[s], V_prime[s]) for s in S):
+        θ_prime = update_value_function(S, R, V, N, π, γ, θ, ϕ)
+        if all(np.isclose(a, b) for a, b in zip(θ, θ_prime)):
             break
-        V = V_prime
-    return V, n_iter
+        θ = θ_prime
+    return θ, n_iter
 
 
 def random_policy(S, A):
@@ -34,9 +51,8 @@ def random_policy(S, A):
     return π
 
 
-def update_value_function(S, R, V, N, π, γ, T=100):
-    """One episode of iterative temporal difference (TD) learning"""
-    V = V.copy()
+def update_value_function(S, R, V, N, π, γ, θ, ϕ, T=100):
+    θ = θ.copy()
     s = (0, 0)
     for _ in range(T):
         # Update per-stat learning rate
@@ -48,13 +64,17 @@ def update_value_function(S, R, V, N, π, γ, T=100):
         s_prime = take_action(S, s, a)
 
         # Temporal difference update step
-        V[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
+        θ -= η * linear_td_update(V, R, γ, θ, ϕ, s, s_prime)
 
         # Stop if reached terminal node
         if s in TERMINAL_NODES:
             break
         s = s_prime
-    return V
+    return θ
+
+
+def linear_td_update(V, R, γ, θ, ϕ, s, s_prime):
+    return (V(θ, s) - R.get(s, 0) - γ * V(θ, s_prime)) * ϕ[s]
 
 
 def learning_rate(t):
@@ -95,11 +115,6 @@ def take_action(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def temporal_difference(V, R, γ, s, s_prime):
-    """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * V[s_prime] - V[s]
-
-
 def print_grid(X):
     for y in range(3, -1, -1):
         print(*(str(X[(x, y)]) + '\t' for x in range(4)))
@@ -118,16 +133,26 @@ if __name__ == '__main__':
     # Rewards
     R = {(3, 3): 1.0, (3, 2): -1.0}
 
+    # Non-linear features
+    ϕ = features(S)
+
+    # Initialize parameters for linear TD
+    θ = initialize_parameters()
+
     # Initialize value function
-    V = {s: 0.0 for s in S}
+    def V(θ, s):
+        return θ @ ϕ[s]
 
     # Discount factor
     γ = 0.75
 
-    # Apply TD(0) iteration
-    V_opt, n_iter = td0_estimator(S, A, R, V, γ)
+    # Approximate value function with linear TD
+    θ_opt, n_iter = linear_td(S, A, R, V, γ, θ, ϕ)
+    V_opt = {s: V(θ_opt, s) for s in S}
 
     # Display results
     print('Converged after', n_iter, 'iterations')
     print('Optimal value function:')
     print_grid(V_opt)
+    print('Optimal parameters:')
+    print(θ_opt)

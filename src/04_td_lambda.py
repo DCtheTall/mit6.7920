@@ -28,7 +28,7 @@ def td_lambda(S, A, R, V, γ, λ):
 
 
 def random_policy(S, A):
-    """Use random policy to show TD{0} still converges"""
+    """Use random policy for exploration"""
     def π(s):
         assert s in S
         return random.sample(list(A), k=1)[0]
