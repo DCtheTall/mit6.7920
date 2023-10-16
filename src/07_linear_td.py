@@ -64,7 +64,7 @@ def update_value_function(S, R, V, N, π, γ, θ, ϕ, T=100):
         s_prime = take_action(S, s, a)
 
         # Temporal difference update step
-        θ -= η * linear_td_update(V, R, γ, θ, ϕ, s, s_prime)
+        θ += η * temporal_difference(V, R, γ, θ, s, s_prime) * ϕ[s]
 
         # Stop if reached terminal node
         if s in TERMINAL_NODES:
@@ -111,8 +111,8 @@ def take_action(S, s, a):
     return random.sample(possible_next_states, 1)[0]
 
 
-def linear_td_update(V, R, γ, θ, ϕ, s, s_prime):
-    return (V(θ, s) - R.get(s, 0) - γ * V(θ, s_prime)) * ϕ[s]
+def temporal_difference(V, R, γ, θ, s, s_prime):
+    return R.get(s, 0.0) + γ * V(θ, s_prime) - V(θ, s)
 
 
 def print_grid(X):
