@@ -8,7 +8,7 @@ import numpy as np
 import random
 
 
-D_MODEL = 5
+D_MODEL = 8
 TERMINAL_NODES = {(3, 3), (3, 2)}
 
 
@@ -17,11 +17,16 @@ def features(S):
     ϕ = {}
     for s in S:
         x, y = s
+        l2_goal = ((x - 3) ** 2 + (y - 3) ** 2) ** 0.5
+        l2_fail = ((x - 3) ** 2 + (y - 2) ** 2) ** 0.5
         ϕ[s] = np.array([
             float(x), float(y), # position
             float(s in TERMINAL_NODES), # if terminal
-            ((x - 3) ** 2 + (y - 3) ** 2) ** 0.5, # L2 distance from goal
-            ((x - 3) ** 2 + (y - 2) ** 2) ** 0.5, # L2 distance from failure
+            l2_goal, # L2 distance from goal
+            l2_fail, # L2 distance from failure
+            0.0 if s == (3, 3) else np.arccos((y - 3) / l2_goal), # angle wrt goal
+            0.0 if s == (3, 2) else np.arccos((y - 2) / l2_fail), # angle wrt failure
+            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
         ], dtype=np.float32)
     return ϕ
 

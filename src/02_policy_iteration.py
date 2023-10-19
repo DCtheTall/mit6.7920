@@ -1,6 +1,6 @@
 """
-Implementation of policy iteration algorithm
-============================================
+Implementation of Policy Iteration
+==================================
 
 """
 

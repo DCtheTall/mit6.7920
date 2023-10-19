@@ -1,6 +1,6 @@
 """
-Implementation of value iteration algorithm
-===========================================
+Implementation of Value Iteration
+=================================
 
 """
 

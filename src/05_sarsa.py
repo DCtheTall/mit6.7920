@@ -7,7 +7,7 @@ depending only on state.
 
 SARSA is an on-policy learning algorithm, meaning that it uses the
 same policy during exploration as it does for selecting the next
-action for temporal distance learning.
+action for temporal difference learning.
 
 """
 
