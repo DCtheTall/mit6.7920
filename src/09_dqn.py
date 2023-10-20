@@ -16,16 +16,18 @@ import optax
 import random
 
 
-D_MODEL = 8
+N_FEATURES = 8
 TERMINAL_NODES = {(3, 3), (3, 2)}
-TRAIN_STEPS = 10000
-TRAIN_START = 200
-MEMORY_SIZE = 2000
-BATCH_SIZE = 32
+LEARNING_RATE = 1e-3
+TRAIN_STEPS = 20000
+TRAIN_START = 1000
+MEMORY_SIZE = 5000
+BATCH_SIZE = 16
 EPSILON_MIN = 0.1
 EPSILON_MAX = 1.0
-EPSILON_DECAY_STEPS = 5000
-COPY_N_STEPS = 100
+EPSILON_DECAY_STEPS = 12000
+LOG_N_STEPS = 1000
+COPY_N_STEPS = 200
 N_ACTIONS = 4
 
 
@@ -50,7 +52,7 @@ def features(S):
 
 def train_dqn(S, A, R, γ, ϕ):
     dqn = DQN(n_actions=len(A),
-              hidden_dim=2*D_MODEL,
+              hidden_dim=2*N_FEATURES,
               n_layers=2)
     memory = ReplayMemory(maxlen=MEMORY_SIZE)
 
@@ -59,10 +61,12 @@ def train_dqn(S, A, R, γ, ϕ):
     target_params = state.params.copy()
     del rng
 
+    metrics_history = {'loss': [], 'avg_q_value': []}
+
     s = (0, 0)
     for step in range(TRAIN_STEPS):
         ε = compute_epsilon_for_step(step)
-        π = epsilon_greedy_policy(state, A, ε, ϕ)
+        π = epsilon_greedy_policy(state, ε, ϕ)
         a_idx = π(s)
         a = A[a_idx]
         r = R.get(s, 0.0)
@@ -79,9 +83,14 @@ def train_dqn(S, A, R, γ, ϕ):
         q_target = np.max(q_target, axis=1, keepdims=False)
         q_target = r_batch + γ * q_target
         state = train_step(state, X_batch, a_batch, q_target)
-        if step > TRAIN_START and step % COPY_N_STEPS == 0:
+        if step % LOG_N_STEPS == 0:
+            state = compute_metrics(state, X_batch, a_batch, q_target)
+            for metric, value in state.metrics.compute().items():
+                metrics_history[metric].append(float(value))
+            state = state.replace(metrics=state.metrics.empty())
+        if step % COPY_N_STEPS == 0:
             target_params = state.params
-    return state
+    return state, metrics_history
 
 
 class DQN(nn.Module):
@@ -127,19 +136,19 @@ class ReplayMemory:
                 np.array(r_batch), np.array(X_prime_batch))
 
 
-
 @struct.dataclass
 class Metrics(metrics.Collection):
     loss: metrics.Average.from_output('loss')
+    avg_q_value: metrics.Average.from_output('avg_q_value')
 
 
 class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_train_state(Q, rng, η=1e-3, β=0.95):
-    params = Q.init(rng, jnp.ones([BATCH_SIZE, D_MODEL]))['params']
-    tx = optax.sgd(η, β)
+def create_train_state(Q, rng, η=LEARNING_RATE, β1=0.9, β2=0.99):
+    params = Q.init(rng, jnp.ones([BATCH_SIZE, N_FEATURES]))['params']
+    tx = optax.adam(η, β1, β2)
     return TrainState.create(
         apply_fn=Q.apply, params=params, tx=tx,
         metrics=Metrics.empty())
@@ -150,10 +159,11 @@ def compute_epsilon_for_step(step):
     return max(a, b - ((b - a) * (step / EPSILON_DECAY_STEPS)))
 
 
-def epsilon_greedy_policy(state, A, ε, ϕ):
+def epsilon_greedy_policy(state, ε, ϕ):
+    """Note that π returns the index in `A`, not the action"""
     def π(s):
         if np.random.rand() < ε:
-            return np.random.randint(len(A))
+            return np.random.randint(N_ACTIONS)
         x = ϕ[s]
         q_pred = state.apply_fn({'params': state.params}, np.array([x]))[0]
         return np.argmax(q_pred, keepdims=True)[0]
@@ -203,13 +213,26 @@ def train_step(state, X_batch, a_batch, q_target):
     return state
 
 
-def dqn_loss(q_pred, q_actual):
-    error = jnp.abs(q_pred - q_actual)
-    clipped_error = jnp.clip(error, 0.0, 1.0)
-    linear_error = 2 * (error - clipped_error)
-    loss = jnp.mean(jnp.square(clipped_error) + linear_error)
-    return loss
+@jax.jit
+def compute_metrics(state, X_batch, a_batch, q_target):
+    q_out = state.apply_fn({'params': state.params}, X_batch)
+    q_pred = q_out * nn.one_hot(a_batch, N_ACTIONS)
+    q_pred = jnp.sum(q_pred, axis=-1)
+    loss = dqn_loss(q_pred, q_target)
+    metric_updates = state.metrics.single_from_model_output(
+        loss=loss, avg_q_value=np.mean(q_out))
+    metrics = state.metrics.merge(metric_updates)
+    state = state.replace(metrics=metrics)
+    return state
 
+
+def dqn_loss(q_pred, q_actual):
+    # error = jnp.abs(q_pred - q_actual)
+    # clipped_error = jnp.clip(error, 0.0, 1.0)
+    # linear_error = 2 * (error - clipped_error)
+    # loss = jnp.mean(jnp.square(clipped_error) + linear_error)
+    # return loss
+    return jnp.mean((q_pred - q_actual) ** 2.0) ** 0.5
 
 def optimal_policy(S, A, ϕ, state):
     π = {}
@@ -223,6 +246,10 @@ def optimal_policy(S, A, ϕ, state):
 def print_grid(X):
     for y in range(3, -1, -1):
         print(*(str(X[(x, y)]) + '\t' for x in range(4)))
+
+
+def print_metric_history(history, metric):
+    print('\n'.join([str(x) for x in history[metric]]))
 
 
 if __name__ == '__main__':
@@ -244,8 +271,12 @@ if __name__ == '__main__':
     # Discount factor
     γ = 0.75
 
-    opt_state = train_dqn(S, A, R, γ, ϕ)
+    opt_state, metrics_history = train_dqn(S, A, R, γ, ϕ)
     π_opt = optimal_policy(S, A, ϕ, opt_state)
 
     print('Optimal policy:')
     print_grid(π_opt)
+    print('Loss:')
+    print_metric_history(metrics_history, 'loss')
+    print('Avg. Q Value:')
+    print_metric_history(metrics_history, 'avg_q_value')
