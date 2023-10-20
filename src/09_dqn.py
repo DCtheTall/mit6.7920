@@ -206,7 +206,7 @@ def train_step(state, X_batch, a_batch, q_target):
         q_pred = state.apply_fn({'params': params}, X_batch)
         q_pred *= nn.one_hot(a_batch, N_ACTIONS)
         q_pred = jnp.sum(q_pred, axis=-1)
-        return dqn_loss(q_pred, q_target)
+        return rmse(q_pred, q_target)
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
@@ -218,7 +218,7 @@ def compute_metrics(state, X_batch, a_batch, q_target):
     q_out = state.apply_fn({'params': state.params}, X_batch)
     q_pred = q_out * nn.one_hot(a_batch, N_ACTIONS)
     q_pred = jnp.sum(q_pred, axis=-1)
-    loss = dqn_loss(q_pred, q_target)
+    loss = rmse(q_pred, q_target)
     metric_updates = state.metrics.single_from_model_output(
         loss=loss, avg_q_value=np.mean(q_out))
     metrics = state.metrics.merge(metric_updates)
@@ -226,12 +226,8 @@ def compute_metrics(state, X_batch, a_batch, q_target):
     return state
 
 
-def dqn_loss(q_pred, q_actual):
-    # error = jnp.abs(q_pred - q_actual)
-    # clipped_error = jnp.clip(error, 0.0, 1.0)
-    # linear_error = 2 * (error - clipped_error)
-    # loss = jnp.mean(jnp.square(clipped_error) + linear_error)
-    # return loss
+def rmse(q_pred, q_actual):
+    """Root mean squared error (RMSE) loss"""
     return jnp.mean((q_pred - q_actual) ** 2.0) ** 0.5
 
 def optimal_policy(S, A, ϕ, state):
