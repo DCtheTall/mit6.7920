@@ -51,9 +51,8 @@ def features(S):
     return ϕ
 
 
-def train_dqn(S, A, R, γ, ϕ):
-    dqn = DQN(n_actions=len(A),
-              hidden_dim=2*N_FEATURES,
+def train_dqn(S, A, R, γ, ϕ, ddqn=True):
+    dqn = DQN(hidden_dim=2*N_FEATURES,
               n_layers=2)
     memory = ReplayMemory(maxlen=MEMORY_SIZE)
 
@@ -80,8 +79,18 @@ def train_dqn(S, A, R, γ, ϕ):
         if step < TRAIN_START:
             continue
         X_batch, a_batch, r_batch, X_prime_batch = memory.sample(ϕ)
-        q_target = state.apply_fn({'params': target_params}, X_prime_batch)
-        q_target = np.max(q_target, axis=1, keepdims=False)
+        # For DDQN, we use the online network to select which action to use.
+        # In vanilla DQN we use the argmax of the target network output.
+        if ddqn:
+            a_prime = state.apply_fn({'params': state.params}, X_prime_batch)
+            a_prime = np.argmax(a_prime, axis=1, keepdims=False)
+            q_target = state.apply_fn({'params': target_params}, X_prime_batch)
+            q_target = np.take_along_axis(q_target,
+                                          np.expand_dims(a_prime, -1), axis=1)
+            q_target = np.squeeze(q_target, axis=-1)
+        else:
+            q_target = state.apply_fn({'params': target_params}, X_prime_batch)
+            q_target = np.max(q_target, axis=1, keepdims=False)
         q_target = r_batch + γ * q_target
         state = train_step(state, X_batch, a_batch, q_target)
         if step % LOG_N_STEPS == 0:
@@ -96,7 +105,6 @@ def train_dqn(S, A, R, γ, ϕ):
 
 class DQN(nn.Module):
     """A simple ANN model"""
-    n_actions: int
     hidden_dim: int
     n_layers: int
 
@@ -110,7 +118,7 @@ class DQN(nn.Module):
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
-        x = nn.Dense(features=self.n_actions)(x)
+        x = nn.Dense(features=N_ACTIONS)(x)
         return x
 
 
