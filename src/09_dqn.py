@@ -28,6 +28,7 @@ EPSILON_MAX = 1.0
 EPSILON_DECAY_STEPS = 12000
 LOG_N_STEPS = 1000
 COPY_N_STEPS = 200
+N_STATES = 16
 N_ACTIONS = 4
 
 
@@ -101,6 +102,11 @@ class DQN(nn.Module):
 
     @nn.compact
     def __call__(self, x):
+        # Positional embedding to let the model also
+        # learn its own features for each state
+        pos = 4 * x[:,0] + x[:,1]
+        x += nn.Embed(num_embeddings=N_STATES,
+                        features=N_FEATURES)(pos.astype(jnp.int32))
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
@@ -229,6 +235,7 @@ def compute_metrics(state, X_batch, a_batch, q_target):
 def rmse(q_pred, q_actual):
     """Root mean squared error (RMSE) loss"""
     return jnp.mean((q_pred - q_actual) ** 2.0) ** 0.5
+
 
 def optimal_policy(S, A, ϕ, state):
     π = {}
