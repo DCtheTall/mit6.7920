@@ -106,7 +106,7 @@ class DQN(nn.Module):
         # learn its own features for each state
         pos = 4 * x[:,0] + x[:,1]
         x += nn.Embed(num_embeddings=N_STATES,
-                        features=N_FEATURES)(pos.astype(jnp.int32))
+                      features=N_FEATURES)(pos.astype(jnp.int32))
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
