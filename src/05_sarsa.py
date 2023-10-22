@@ -11,8 +11,8 @@ action for temporal difference learning.
 
 """
 
-import random
 import numpy as np
+from util.display import print_grid
 from util.gridworld import GridWorld
 
 
@@ -84,11 +84,6 @@ def temporal_difference(Q, R, γ, s, a, s_prime, a_prime):
 
 def optimal_policy(S, A, Q):
     return {s: max(A, key=lambda a, s=s: Q[(s, a)]) for s in S}
-
-
-def print_grid(X):
-    for y in range(3, -1, -1):
-        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':

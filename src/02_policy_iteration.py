@@ -5,6 +5,7 @@ Implementation of Policy Iteration
 """
 
 import numpy as np
+from util.display import print_grid
 from util.gridworld import Action, GridWorld
 
 
@@ -58,11 +59,6 @@ def optimal_bellman_operator_policy(S, A, R, P, V, γ):
         }
         π[s] = max(possible_actions, key=possible_actions.get)
     return π
-
-
-def print_grid(X):
-    for y in range(3, -1, -1):
-        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':

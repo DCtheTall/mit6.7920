@@ -8,6 +8,7 @@ If you set λ=0, then this becomes TD(0).
 
 import numpy as np
 import random
+from util.display import print_grid
 from util.gridworld import GridWorld
 
 
@@ -67,11 +68,6 @@ def update_value_function(env, V, N, π, γ, λ, T=100):
 def temporal_difference(V, R, γ, s, s_prime):
     """Compute temporal difference term in current step"""
     return R[s] + γ * V[s_prime] - V[s]
-
-
-def print_grid(X):
-    for y in range(3, -1, -1):
-        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':

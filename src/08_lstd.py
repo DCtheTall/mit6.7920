@@ -8,6 +8,7 @@ TODO implement
 
 import numpy as np
 import random
+from util.display import print_grid
 from util.gridworld import GridWorld
 
 
@@ -95,11 +96,6 @@ def learning_rate(t):
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t
-
-
-def print_grid(X):
-    for y in range(3, -1, -1):
-        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 if __name__ == '__main__':

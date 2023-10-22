@@ -13,7 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import random
+from util.display import print_grid
 from util.gridworld import GridWorld
 
 
@@ -226,11 +226,6 @@ def optimal_policy(S, A, ϕ, state):
         q = state.apply_fn({'params': state.params}, np.array([x]))[0]
         π[s] = A[np.argmax(q)]
     return π
-
-
-def print_grid(X):
-    for y in range(3, -1, -1):
-        print(*(str(X[(x, y)]) + '\t' for x in range(4)))
 
 
 def print_metric_history(history, metric):
