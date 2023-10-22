@@ -8,7 +8,7 @@ for demonstrating different learning algorithms.
 
 import enum
 import numpy as np
-from typing import Dict, List, Set, Tuple
+from typing import Callable, Dict, List, Set, Tuple
 
 
 N_ACTIONS = 4
@@ -60,10 +60,26 @@ class GridWorld:
         self.failure = (size - 1, size - 2)
         self.A = [a for a in Action]
         self.P = _build_transition_probabilities(self.S, self.A,
+                                                 self.is_terminal_state,
                                                  transition_probs)
         self.R = {s: 0.0 for s in self.S}
         self.R[self.goal] = goal_reward
         self.R[self.failure] = failure_reward
+
+    def step(self, s: State, a: Action) -> State:
+        """Sample next state given state and action"""
+        possible_states = []
+        p_weights = []
+        for s_prime in self.S:
+            p = self.P.get((s, a, s_prime), 0.0)
+            if p > 0.0:
+                possible_states.append(s_prime)
+                p_weights.append(p)
+        assert np.isclose(sum(p_weights), 1.0)
+        idx = np.random.choice([i for i, _ in enumerate(possible_states)],
+                               size=1,
+                               p=p_weights)[0]
+        return possible_states[idx]
 
     @property
     def n_states(self) -> int:
@@ -76,12 +92,13 @@ class GridWorld:
 def _build_transition_probabilities(
         S: States,
         A: Actions,
+        is_terminal: Callable[[State], bool],
         transition_probs: Tuple[float, float]) -> Transitions:
     assert np.isclose(1.0, transition_probs[0] + 2 * transition_probs[1])
     P = {}
     for s in S:
         for a in A:
-            if s in {(3, 3), (3, 2)}:
+            if is_terminal(s):
                 P[(s, a, s)] = 1.0
                 continue
             possible_next_states = []
@@ -112,6 +129,3 @@ def _build_transition_probabilities(
             if len(p_weights) < 3:
                 P[(s, a, s)] = 1.0 - sum(p_weights)
     return P
-
-
-GridWorld(size=4, transition_probs=(1.0, 0.0))

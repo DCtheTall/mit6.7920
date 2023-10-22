@@ -8,19 +8,17 @@ algorithm.
 
 import numpy as np
 import random
+from util.gridworld import GridWorld
 
 
-TERMINAL_NODES = {(3, 3), (3, 2)}
-
-
-def td0_estimator(S, A, R, V, γ):
-    N = {s: 0.0 for s in S}
-    π = random_policy(S, A)
+def td0_estimator(env, V, γ):
+    N = {s: 0.0 for s in env.S}
+    π = random_policy(env.S, env.A)
     n_iter = 0
     while True:
         n_iter += 1
-        V_prime = update_value_function(S, R, V, N, π, γ)
-        if all(np.isclose(V[s], V_prime[s]) for s in S):
+        V_prime = update_value_function(env, V, N, π, γ)
+        if all(np.isclose(V[s], V_prime[s]) for s in env.S):
             break
         V = V_prime
     return V, n_iter
@@ -34,10 +32,10 @@ def random_policy(S, A):
     return π
 
 
-def update_value_function(S, R, V, N, π, γ, T=100):
+def update_value_function(env, V, N, π, γ, T=100):
     """One episode of iterative temporal difference (TD) learning"""
     V = V.copy()
-    s = (0, 0)
+    s = env.start
     for _ in range(T):
         # Update per-stat learning rate
         N[s] += 1.0
@@ -45,13 +43,13 @@ def update_value_function(S, R, V, N, π, γ, T=100):
 
         # Take action
         a = π(s)
-        s_prime = take_action(S, s, a)
+        s_prime = env.step(s, a)
 
         # Temporal difference update step
-        V[s] = V[s] + η * temporal_difference(V, R, γ, s, s_prime)
+        V[s] = V[s] + η * temporal_difference(V, env.R, γ, s, s_prime)
 
         # Stop if reached terminal node
-        if s in TERMINAL_NODES:
+        if env.is_terminal_state(s):
             break
         s = s_prime
     return V
@@ -65,36 +63,6 @@ def learning_rate(t):
     return 1.0 / t
 
 
-# Memoization table for function below
-T = {}
-
-def take_action(S, s, a):
-    """Sample next state from MDP
-    
-    TD(0) algorithm treats this as a black box.
-    """
-    if s in {(3, 3), (3, 2)}:
-        return s
-    if (s, a) in T:
-        return random.sample(T[(s, a)], 1)[0]
-    possible_next_states = []
-    for s_prime in S:
-        dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-        if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
-            continue
-        if a == 'Left' and dx == 1:
-            continue
-        if a == 'Right' and dx == -1:
-            continue
-        if a == 'Up' and dy == -1:
-            continue
-        if a == 'Down' and dy == 1:
-            continue
-        possible_next_states.append(s_prime)
-    T[(s, a)] = possible_next_states
-    return random.sample(possible_next_states, 1)[0]
-
-
 def temporal_difference(V, R, γ, s, s_prime):
     """Compute temporal difference term in current step"""
     return R.get(s, 0.0) + γ * V[s_prime] - V[s]
@@ -106,26 +74,16 @@ def print_grid(X):
 
 
 if __name__ == '__main__':
-    # Set of all states, 4x4 grid
-    S = {
-        (i // 4, i % 4)
-        for i in range(16)
-    }
-
-    # Set of all actions
-    A = {'Up', 'Down', 'Left', 'Right'}
-
-    # Rewards
-    R = {(3, 3): 1.0, (3, 2): -1.0}
+    env = GridWorld(size=4)
 
     # Initialize value function
-    V = {s: 0.0 for s in S}
+    V = {s: 0.0 for s in env.S}
 
     # Discount factor
     γ = 0.75
 
     # Apply TD(0) iteration
-    V_opt, n_iter = td0_estimator(S, A, R, V, γ)
+    V_opt, n_iter = td0_estimator(env, V, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
