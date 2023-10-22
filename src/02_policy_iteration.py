@@ -5,33 +5,7 @@ Implementation of Policy Iteration
 """
 
 import numpy as np
-
-
-def build_transition_probs(S, A):
-    """Build transition probability for 4x4 Frozen Lake MDP."""
-    P = {}
-    for s in S:
-        for a in A:
-            if s in {(3, 3), (3, 2)}:
-                P[(s, a, s)] = 1.0
-                continue
-            possible_next_states = []
-            for s_prime in S:
-                dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-                if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
-                    continue
-                if a == 'Left' and dx == 1:
-                    continue
-                if a == 'Right' and dx == -1:
-                    continue
-                if a == 'Up' and dy == -1:
-                    continue
-                if a == 'Down' and dy == 1:
-                    continue
-                possible_next_states.append(s_prime)
-            for s_prime in possible_next_states:
-                P[(s, a, s_prime)] = 1.0 / len(possible_next_states)
-    return P
+from util.gridworld import Action, GridWorld
 
 
 def policy_iteration(S, A, R, P, V, γ, π):
@@ -92,20 +66,19 @@ def print_grid(X):
 
 
 if __name__ == '__main__':
+    env = GridWorld(size=4)
+
     # Set of all states, 4x4 grid
-    S = {
-        (i // 4, i % 4)
-        for i in range(16)
-    }
+    S = env.S
 
     # Set of all actions
-    A = {'Up', 'Down', 'Left', 'Right'}
+    A = env.A
 
     # Transition probabiltiy table
-    P = build_transition_probs(S, A)
+    P = env.P
 
     # Rewards
-    R = {(3, 3): 1.0, (3, 2): -1.0}
+    R = env.R
 
     # Initialize value function
     V = {s: 0.0 for s in S}
@@ -114,7 +87,7 @@ if __name__ == '__main__':
     γ = 0.75
 
     # Initialize stationary policy
-    π = {s: 'Right' for s in S}
+    π = {s: Action.Right for s in S}
 
     # Apply policy iteration
     V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, V, γ, π)

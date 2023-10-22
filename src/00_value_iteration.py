@@ -5,33 +5,7 @@ Implementation of Value Iteration
 """
 
 import numpy as np
-
-
-def build_transition_probs(S, A):
-    """Build transition probability for 4x4 Frozen Lake MDP."""
-    P = {}
-    for s in S:
-        for a in A:
-            if s in {(3, 3), (3, 2)}:
-                P[(s, a, s)] = 1.0
-                continue
-            possible_next_states = []
-            for s_prime in S:
-                dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-                if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
-                    continue
-                if a == 'Left' and dx == 1:
-                    continue
-                if a == 'Right' and dx == -1:
-                    continue
-                if a == 'Up' and dy == -1:
-                    continue
-                if a == 'Down' and dy == 1:
-                    continue
-                possible_next_states.append(s_prime)
-            for s_prime in possible_next_states:
-                P[(s, a, s_prime)] = 1.0 / len(possible_next_states)
-    return P
+from util.gridworld import GridWorld
 
 
 def value_iteration(S, A, R, P, V, γ):
@@ -94,20 +68,19 @@ def print_grid(X):
 
 
 if __name__ == '__main__':
-    # Set of all states, 4x4 grid
-    S = {
-        (i // 4, i % 4)
-        for i in range(16)
-    }
+    env = GridWorld(size=4)
+
+    # Set of all states, 4x4 grid world
+    S = env.S
 
     # Set of all actions
-    A = {'Up', 'Down', 'Left', 'Right'}
+    A = env.A
 
     # Transition probabiltiy table
-    P = build_transition_probs(S, A)
+    P = env.P
 
     # Rewards
-    R = {(3, 3): 1.0, (3, 2): -1.0}
+    R = env.R
 
     # Initialize value function
     V = {s: 0.0 for s in S}
@@ -120,7 +93,7 @@ if __name__ == '__main__':
 
     # Derive optimal policy from value function using the optimal
     # Bellman operator.
-    π_opt = optimal_bellman_operator_policy(S, A, R, P, V_opt,  γ)
+    π_opt = optimal_bellman_operator_policy(S, A, R, P, V_opt, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
