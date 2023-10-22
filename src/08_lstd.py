@@ -1,6 +1,8 @@
 """
-Implementation of Linear Temporal Difference Learning
-=====================================================
+Implementation of Least Squares Temporal Difference (LSTD) Learning
+===================================================================
+
+TODO implement
 
 """
 
@@ -35,20 +37,22 @@ def features(env):
 
 
 def initialize_parameters():
-    return np.zeros((N_FEATURES,))
+    return np.eye(N_FEATURES), np.zeros([N_FEATURES])
 
 
-def ilstd(env, V, γ, λ, θ, ϕ):
+def lstd(env, γ, λ, A, b, ϕ):
     N = {s: 0.0 for s in env.S}
     π = random_policy(env.S, env.A)
     n_iter = 0
     while True:
         n_iter += 1
-        θ_prime = update_value_function(env, V, N, π, γ, λ, θ, ϕ)
-        if all(np.isclose(a, b) for a, b in zip(θ, θ_prime)):
+        A_prime, b_prime = update_parameters(env, N, π, γ, λ, A, b, ϕ)
+        if (all(np.isclose(a, b)
+                for a, b in zip(A.reshape((-1,)), A_prime.reshape((-1,))))
+            and all(np.isclose(a, b) for a, b in zip(b, b_prime))):
             break
-        θ = θ_prime
-    return θ, n_iter
+        A, b = A_prime, b_prime
+    return A, b, n_iter
 
 
 def random_policy(S, A):
@@ -59,10 +63,11 @@ def random_policy(S, A):
     return π
 
 
-def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
-    θ = θ.copy()
-    s = (0, 0)
-    z = {}
+def update_parameters(env, N, π, γ, λ, A, b, ϕ, T=100):
+    A, b = A.copy(), b.copy()
+    s = env.start
+    # Eligibility trace for TD(λ)
+    z = np.zeros((N_FEATURES,))
     for _ in range(T):
         # Update per-stat learning rate
         N[s] += 1.0
@@ -71,21 +76,17 @@ def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
         a = π(s)
         s_prime = env.step(s, a)
 
-        z[s] = z.get(s, 0.0) + 1.0
+        z *= λ
+        z += ϕ[s]
 
-        # TD(λ) update step
-        for sx in z.keys():
-            N[sx] = N.get(sx, 0) + 1
-            η = learning_rate(N[sx])
-            dt = temporal_difference(V, env.R, γ, θ, s, s_prime)
-            θ += η * z[sx] * dt * ϕ[sx]
-            z[sx] *= λ * γ
+        A += np.outer(z, ϕ[s] - γ * ϕ[s_prime])
+        b += env.R[s] * z
 
         # Stop if reached terminal node
         if env.is_terminal_state(s):
             break
         s = s_prime
-    return θ
+    return A, b
 
 
 def learning_rate(t):
@@ -94,10 +95,6 @@ def learning_rate(t):
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t
-
-
-def temporal_difference(V, R, γ, θ, s, s_prime):
-    return R[s] + γ * V(θ, s_prime) - V(θ, s)
 
 
 def print_grid(X):
@@ -112,23 +109,24 @@ if __name__ == '__main__':
     ϕ = features(env)
 
     # Initialize parameters for linear TD
-    θ = initialize_parameters()
-
-    # Initialize parameterized value function
-    def V(θ, s):
-        return θ @ ϕ[s]
+    A, b = initialize_parameters()
 
     # Discount factor
     γ = 0.75
     λ = 0.6
 
     # Approximate value function with linear TD
-    θ_opt, n_iter = ilstd(env, V, γ, λ, θ, ϕ)
-    V_opt = {s: V(θ_opt, s) for s in env.S}
+    A_opt, b_opt, n_iter = lstd(env, γ, λ, A, b, ϕ)
+
+    # Initialize parameterized value function
+    def V(A, b, s):
+        return np.linalg.pinv(A) @ b @ ϕ[s]
+    V_opt = {s: V(A_opt, b_opt, s) for s in env.S}
 
     # Display results
     print('Converged after', n_iter, 'iterations')
     print('Optimal value function:')
     print_grid(V_opt)
     print('Optimal parameters:')
-    print(θ_opt)
+    print(A_opt)
+    print(b_opt)

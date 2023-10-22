@@ -14,44 +14,47 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import random
+from util.gridworld import GridWorld
 
 
-N_FEATURES = 8
-TERMINAL_NODES = {(3, 3), (3, 2)}
+N_FEATURES = 9
 LEARNING_RATE = 1e-3
-TRAIN_STEPS = 20000
+TRAIN_STEPS = 25000
 TRAIN_START = 1000
 MEMORY_SIZE = 5000
 BATCH_SIZE = 16
 EPSILON_MIN = 0.1
 EPSILON_MAX = 1.0
-EPSILON_DECAY_STEPS = 12000
+EPSILON_DECAY_STEPS = 15000
 LOG_N_STEPS = 1000
-COPY_N_STEPS = 200
+COPY_N_STEPS = 250
 N_STATES = 16
 N_ACTIONS = 4
 
 
-def features(S):
+def features(env):
     """Extract features for linear TD"""
     ϕ = {}
-    for s in S:
+    for s in env.S:
         x, y = s
-        l2_goal = ((x - 3) ** 2 + (y - 3) ** 2) ** 0.5
-        l2_fail = ((x - 3) ** 2 + (y - 2) ** 2) ** 0.5
+        xg, yg = env.goal
+        xf, yf = env.failure
+        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
+        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
         ϕ[s] = np.array([
             float(x), float(y), # position
-            float(s in TERMINAL_NODES), # if terminal
+            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
+            float(x + y), # L1 norm from origin
             l2_goal, # L2 distance from goal
             l2_fail, # L2 distance from failure
-            0.0 if s == (3, 3) else np.arccos((y - 3) / l2_goal), # angle wrt goal
-            0.0 if s == (3, 2) else np.arccos((y - 2) / l2_fail), # angle wrt failure
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
+            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
+            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
+            float(env.is_terminal_state(s)),
         ], dtype=np.float32)
     return ϕ
 
 
-def train_dqn(S, A, R, γ, ϕ, ddqn=True):
+def train_dqn(env, γ, ϕ, ddqn=False):
     dqn = DQN(hidden_dim=2*N_FEATURES,
               n_layers=2)
     memory = ReplayMemory(maxlen=MEMORY_SIZE)
@@ -63,30 +66,31 @@ def train_dqn(S, A, R, γ, ϕ, ddqn=True):
 
     metrics_history = {'loss': [], 'avg_q_value': []}
 
-    s = (0, 0)
+    s = env.start
     for step in range(TRAIN_STEPS):
         ε = compute_epsilon_for_step(step)
         π = epsilon_greedy_policy(state, ε, ϕ)
         a_idx = π(s)
-        a = A[a_idx]
-        r = R.get(s, 0.0)
-        s_prime = take_action(S, s, a)
+        a = env.A[a_idx]
+        r = env.R[s]
+        s_prime = env.step(s, a)
         memory.append(s, a_idx, r, s_prime)
-        if s in TERMINAL_NODES:
-            s = (0, 0)
+        if env.is_terminal_state(s):
+            s = env.start
         else:
             s = s_prime
         if step < TRAIN_START:
             continue
         X_batch, a_batch, r_batch, X_prime_batch = memory.sample(ϕ)
         # For DDQN, we use the online network to select which action to use.
-        # In vanilla DQN we use the argmax of the target network output.
+        # In vanilla DQN we use the max of the target network output.
         if ddqn:
             a_prime = state.apply_fn({'params': state.params}, X_prime_batch)
             a_prime = np.argmax(a_prime, axis=1, keepdims=False)
             q_target = state.apply_fn({'params': target_params}, X_prime_batch)
             q_target = np.take_along_axis(q_target,
-                                          np.expand_dims(a_prime, -1), axis=1)
+                                          np.expand_dims(a_prime, -1),
+                                          axis=1)
             q_target = np.squeeze(q_target, axis=-1)
         else:
             q_target = state.apply_fn({'params': target_params}, X_prime_batch)
@@ -184,36 +188,6 @@ def epsilon_greedy_policy(state, ε, ϕ):
     return π
 
 
-# Memoization table for function below
-T = {}
-
-def take_action(S, s, a):
-    """Sample next state from MDP
-    
-    TD(0) algorithm treats this as a black box.
-    """
-    if s in {(3, 3), (3, 2)}:
-        return s
-    if (s, a) in T:
-        return random.sample(T[(s, a)], 1)[0]
-    possible_next_states = []
-    for s_prime in S:
-        dx, dy = s_prime[0] - s[0], s_prime[1] - s[1]
-        if max(abs(dx), abs(dy), abs(dx) + abs(dy)) != 1:
-            continue
-        if a == 'Left' and dx == 1:
-            continue
-        if a == 'Right' and dx == -1:
-            continue
-        if a == 'Up' and dy == -1:
-            continue
-        if a == 'Down' and dy == 1:
-            continue
-        possible_next_states.append(s_prime)
-    T[(s, a)] = possible_next_states
-    return random.sample(possible_next_states, 1)[0]
-
-
 @jax.jit
 def train_step(state, X_batch, a_batch, q_target):
     def loss_fn(params):
@@ -264,26 +238,16 @@ def print_metric_history(history, metric):
 
 
 if __name__ == '__main__':
-    # Set of all states, 4x4 grid
-    S = {
-        (i // 4, i % 4)
-        for i in range(16)
-    }
-
-    # Set of all actions, list to allow indexing
-    A = ['Up', 'Down', 'Left', 'Right']
-
-    # Rewards
-    R = {(3, 3): 1.0, (3, 2): -1.0}
+    env = GridWorld(size=4)
 
     # Non-linear features
-    ϕ = features(S)
+    ϕ = features(env)
 
     # Discount factor
     γ = 0.75
 
-    opt_state, metrics_history = train_dqn(S, A, R, γ, ϕ)
-    π_opt = optimal_policy(S, A, ϕ, opt_state)
+    opt_state, metrics_history = train_dqn(env, γ, ϕ, ddqn=True)
+    π_opt = optimal_policy(env.S, env.A, ϕ, opt_state)
 
     print('Optimal policy:')
     print_grid(π_opt)

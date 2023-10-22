@@ -39,7 +39,7 @@ def bellman_operator(S, R, P, V, γ, s, a):
     
     Complexity: O(S)
     """
-    return R.get(s, 0.0) + γ * sum(
+    return R[s] + γ * sum(
         P.get((s, a, s_prime), 0) * V[s_prime]
         for s_prime in S
     )

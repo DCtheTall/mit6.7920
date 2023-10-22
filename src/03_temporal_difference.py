@@ -46,7 +46,8 @@ def update_value_function(env, V, N, π, γ, T=100):
         s_prime = env.step(s, a)
 
         # Temporal difference update step
-        V[s] = V[s] + η * temporal_difference(V, env.R, γ, s, s_prime)
+        dt = temporal_difference(V, env.R, γ, s, s_prime)
+        V[s] += η * dt
 
         # Stop if reached terminal node
         if env.is_terminal_state(s):
@@ -65,7 +66,7 @@ def learning_rate(t):
 
 def temporal_difference(V, R, γ, s, s_prime):
     """Compute temporal difference term in current step"""
-    return R.get(s, 0.0) + γ * V[s_prime] - V[s]
+    return R[s] + γ * V[s_prime] - V[s]
 
 
 def print_grid(X):

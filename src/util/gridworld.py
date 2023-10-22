@@ -6,6 +6,7 @@ for demonstrating different learning algorithms.
 
 """
 
+from collections import defaultdict
 import enum
 import numpy as np
 from typing import Callable, Dict, List, Set, Tuple
@@ -80,10 +81,6 @@ class GridWorld:
                                size=1,
                                p=p_weights)[0]
         return possible_states[idx]
-
-    @property
-    def n_states(self) -> int:
-        return len(self.S)
     
     def is_terminal_state(self, s: State) -> bool:
         return s in {self.goal, self.failure}
@@ -94,7 +91,8 @@ def _build_transition_probabilities(
         A: Actions,
         is_terminal: Callable[[State], bool],
         transition_probs: Tuple[float, float]) -> Transitions:
-    assert np.isclose(1.0, transition_probs[0] + 2 * transition_probs[1])
+    p1, p2 = transition_probs
+    assert np.isclose(1.0, p1 + 2 * p2)
     P = {}
     for s in S:
         for a in A:
@@ -110,19 +108,19 @@ def _build_transition_probabilities(
                 if a == Action.Left:
                     if dx == 1:
                         continue
-                    p_weights.append(transition_probs[0 if dx == -1 else 1])
+                    p_weights.append(p1 if dx == -1 else p2)
                 if a == Action.Right:
                     if dx == -1:
                         continue
-                    p_weights.append(transition_probs[0 if dx == 1 else 1])
+                    p_weights.append(p1 if dx == 1 else p2)
                 if a == Action.Up:
                     if dy == -1:
                         continue
-                    p_weights.append(transition_probs[0 if dy == 1 else 1])
+                    p_weights.append(p1 if dy == 1 else p2)
                 if a == Action.Down:
                     if dy == 1:
                         continue
-                    p_weights.append(transition_probs[0 if dy == -1 else 1])
+                    p_weights.append(p1 if dy == -1 else p2)
                 possible_next_states.append(s_prime)
             for s_prime, p_weight in zip(possible_next_states, p_weights):
                 P[(s, a, s_prime)] = p_weight
