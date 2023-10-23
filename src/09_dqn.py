@@ -29,6 +29,7 @@ EPSILON_DECAY_STEPS = 15000
 LOG_N_STEPS = 1000
 COPY_N_STEPS = 250
 N_STATES = 16
+N_Y_COORDS = 4
 N_ACTIONS = 4
 
 
@@ -108,7 +109,6 @@ def train_dqn(env, γ, ϕ, ddqn=False):
 
 
 class DQN(nn.Module):
-    """A simple ANN model"""
     hidden_dim: int
     n_layers: int
 
@@ -116,7 +116,7 @@ class DQN(nn.Module):
     def __call__(self, x):
         # Positional embedding to let the model also
         # learn its own features for each state
-        pos = 4 * x[:,0] + x[:,1]
+        pos = N_Y_COORDS * x[:,0] + x[:,1]
         x += nn.Embed(num_embeddings=N_STATES,
                       features=N_FEATURES)(pos.astype(jnp.int32))
         for _ in range(self.n_layers):
@@ -164,11 +164,11 @@ class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_train_state(Q, rng, η=LEARNING_RATE, β1=0.9, β2=0.99):
-    params = Q.init(rng, jnp.ones([BATCH_SIZE, N_FEATURES]))['params']
+def create_train_state(dqn, rng, η=LEARNING_RATE, β1=0.9, β2=0.99):
+    params = dqn.init(rng, jnp.ones([BATCH_SIZE, N_FEATURES]))['params']
     tx = optax.adam(η, β1, β2)
     return TrainState.create(
-        apply_fn=Q.apply, params=params, tx=tx,
+        apply_fn=dqn.apply, params=params, tx=tx,
         metrics=Metrics.empty())
 
 
@@ -219,7 +219,7 @@ def rmse(q_pred, q_actual):
     return jnp.mean((q_pred - q_actual) ** 2.0) ** 0.5
 
 
-def optimal_policy(S, A, ϕ, state):
+def optimal_policy(state, S, A, ϕ):
     π = {}
     for s in S:
         x = ϕ[s]
@@ -242,7 +242,7 @@ if __name__ == '__main__':
     γ = 0.75
 
     opt_state, metrics_history = train_dqn(env, γ, ϕ, ddqn=True)
-    π_opt = optimal_policy(env.S, env.A, ϕ, opt_state)
+    π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)
