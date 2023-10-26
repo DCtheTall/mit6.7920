@@ -26,10 +26,8 @@ N_STATES = 16
 N_Y_COORDS = 4
 N_ACTIONS = 4
 LEARNING_RATE = 1e-3
-N_EPISODES_PER_UPDATE = 200
-TRAIN_STEPS = 100
-
-print(jax.devices(backend='gpu'))
+N_EPISODES_PER_UPDATE = 100
+TRAIN_STEPS = 1000
 
 
 def features(env):
@@ -54,8 +52,8 @@ def features(env):
 
 
 def reinforce(env, γ, ϕ, T=100):
-    π_net = PolicyNet(hidden_dim=4*N_FEATURES,
-                      n_layers=2)
+    π_net = PolicyNet(hidden_dim=2*N_FEATURES,
+                      n_layers=4)
     rng = jax.random.key(42)
     state = create_train_state(π_net, rng)
     del rng
@@ -74,7 +72,8 @@ def reinforce(env, γ, ϕ, T=100):
 
                 a_idx = np.random.multinomial(1, pvals=a_logits)
                 a_idx = np.argmax(a_idx)
-                grads = compute_gradients(state, np.array([x]), np.array([a_idx]))
+                grads = compute_gradients(state, np.array([x]),
+                                          np.array([a_idx]))
                 cur_grads.append(grads)
 
                 a = env.A[a_idx]
@@ -88,7 +87,7 @@ def reinforce(env, γ, ϕ, T=100):
                 s = s_prime
             all_grads.append(cur_grads)
             all_rewards.append(cur_rewards)
-        
+
         all_rewards = discount_and_normalize(all_rewards, γ)
         grads = policy_gradient(all_grads, all_rewards)
         state = state.apply_gradients(grads=grads)
@@ -101,12 +100,15 @@ class PolicyNet(nn.Module):
 
     @nn.compact
     def __call__(self, x):
+        kernel_init = nn.initializers.normal(stddev=0.1)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim,
-                         dtype=jnp.float64)(x)
+                         dtype=jnp.float64,
+                         kernel_init=kernel_init)(x)
             x = nn.relu(x)
         x = nn.Dense(features=N_ACTIONS,
-                     dtype=jnp.float64)(x)
+                     dtype=jnp.float64,
+                     kernel_init=kernel_init)(x)
         # Use softmax so output is probability of each action
         logits = nn.softmax(x)
         return logits
