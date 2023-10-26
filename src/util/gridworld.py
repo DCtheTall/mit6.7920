@@ -6,7 +6,6 @@ for demonstrating different learning algorithms.
 
 """
 
-from collections import defaultdict
 import enum
 import numpy as np
 from typing import Callable, Dict, List, Set, Tuple
@@ -46,8 +45,8 @@ class GridWorld:
     def __init__(self,
                  size: int,
                  # First is probability you go in direction of action.
-                 # Second is probability you go in any direction but
-                 # opposite of action.
+                 # Second is probability you go in any other direction
+                 # *but* opposite of action.
                  # For static GridWorld use (1.0, 0.0).
                  transition_probs: Tuple[float, float] = (1.0/3.0,) * 2,
                  goal_reward: float = 1.0,

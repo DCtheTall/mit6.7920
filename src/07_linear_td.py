@@ -73,14 +73,14 @@ def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
         s_prime = env.step(s, a)
 
         z[s] = z.get(s, 0.0) + 1.0
+        dt = temporal_difference(V, env.R, γ, θ, s, s_prime)
 
         # TD(λ) update step
-        for sx in z.keys():
-            N[sx] = N.get(sx, 0) + 1
-            η = learning_rate(N[sx])
-            dt = temporal_difference(V, env.R, γ, θ, s, s_prime)
-            θ += η * z[sx] * dt * ϕ[sx]
-            z[sx] *= λ * γ
+        for sz in z.keys():
+            N[sz] = N.get(sz, 0) + 1
+            η = learning_rate(N[sz])
+            θ += η * z[sz] * dt * ϕ[sz]
+            z[sz] *= λ * γ
 
         # Stop if reached terminal node
         if env.is_terminal_state(s):
