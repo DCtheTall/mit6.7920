@@ -2,9 +2,9 @@
 Implementation of Actor-Critic
 ==============================
 This file implements the Actor-Critic with Advantage Function (A2C)
-variant of the Actor-Critic policy gradient method. This implemntation
-uses Generalized Advantage Estimation (GAE) with a critic that is a
-linear model.
+variant of the Actor-Critic policy gradient method.
+
+TODO share network between actor critic
 
 """
 
@@ -96,7 +96,7 @@ def actor_critic(env, V, γ, λ, ϕ, ω, T=100):
 
             # Update actor
             grads = compute_gradients(state, np.array([x]), np.array([a_idx]))
-            grads = policy_gradient(grads, V(ω, s_prime))
+            grads = policy_gradient(grads, V(ω, s))
             state = state.apply_gradients(grads=grads)
 
             if env.is_terminal_state(s):

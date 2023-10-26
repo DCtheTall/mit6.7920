@@ -1,6 +1,9 @@
 """
 Implementation of REINFORCE Policy Gradient Algorithm
 =====================================================
+Implementation of REINFORCE policy gradient learning algorithm
+for GridWorld 4x4. Due to the high variance of this algorithm it
+fails to converge to a result.
 
 """
 
@@ -23,8 +26,10 @@ N_STATES = 16
 N_Y_COORDS = 4
 N_ACTIONS = 4
 LEARNING_RATE = 1e-3
-N_EPISODES_PER_UPDATE = 1000
-TRAIN_STEPS = 5
+N_EPISODES_PER_UPDATE = 200
+TRAIN_STEPS = 100
+
+print(jax.devices(backend='gpu'))
 
 
 def features(env):
@@ -180,7 +185,6 @@ def optimal_policy(state, S, A, ϕ):
         x = ϕ[s]
         a_logits = state.apply_fn({'params': state.params}, np.array([x]))[0]
         π[s] = A[np.argmax(a_logits)]
-        print(a_logits)
     return π
 
 
