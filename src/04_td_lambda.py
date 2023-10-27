@@ -52,11 +52,11 @@ def update_value_function(env, V, N, π, γ, λ, T=100):
         a = π(s)
         s_prime = env.step(s, a)
         z[s] = z.get(s, 0.0) + 1.0
+        dt = temporal_difference(V, env.R, γ, s, s_prime)
         for sz in z.keys():
             # Temporal difference update step
             N[sz] = N.get(sz, 0) + 1
             η = learning_rate(N[sz])
-            dt = temporal_difference(V, env.R, γ, s, s_prime)
             V[sz] += η * z[sz] * dt
             z[sz] *= λ * γ
         if env.is_terminal_state(s):

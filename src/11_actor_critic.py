@@ -25,8 +25,8 @@ N_Y_COORDS = 4
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
-ACTOR_LEARNING_RATE = 1e-3
-CRITIC_LEARNING_RATE = 1e-3
+ACTOR_LEARNING_RATE = 1e-5
+CRITIC_LEARNING_RATE = 1e-4
 N_EPISODES = 10
 
 
@@ -69,8 +69,6 @@ def actor_critic(env, γ, ϕ, T=100):
 
     for _ in range(N_EPISODES):
         s = env.start
-        # Eligibility traces
-        z = {}
         for _ in range(T):
             x = ϕ[s]
             a_logits = π_state.apply_fn({'params': π_state.params},
@@ -112,6 +110,7 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(self, x):
+        x = nn.standardize(x)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
