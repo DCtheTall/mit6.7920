@@ -26,8 +26,8 @@ N_STATES = 16
 N_Y_COORDS = 4
 N_ACTIONS = 4
 LEARNING_RATE = 1e-3
-N_EPISODES_PER_UPDATE = 100
-TRAIN_STEPS = 1000
+N_EPISODES_PER_UPDATE = 500
+TRAIN_STEPS = 2
 
 
 def features(env):
@@ -69,7 +69,6 @@ def reinforce(env, γ, ϕ, T=100):
                 x = ϕ[s]
                 a_logits = state.apply_fn({'params': state.params},
                                           np.array([x]))[0]
-
                 a_idx = np.random.multinomial(1, pvals=a_logits)
                 a_idx = np.argmax(a_idx)
                 grads = compute_gradients(state, np.array([x]),

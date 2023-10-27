@@ -1,10 +1,7 @@
 """
 Implementation of Actor-Critic
 ==============================
-This file implements the Actor-Critic with Advantage Function (A2C)
-variant of the Actor-Critic policy gradient method.
-
-TODO share network between actor critic
+This file implements vanilla Actor-Critic
 
 """
 
@@ -26,7 +23,10 @@ N_FEATURES = 9
 N_STATES = 16
 N_Y_COORDS = 4
 N_ACTIONS = 4
+N_HIDDEN_LAYERS = 4
+N_HIDDEN_FEAFURES = 2 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-3
+CRITIC_LEARNING_RATE = 1e-3
 N_EPISODES = 1000
 
 
@@ -52,19 +52,18 @@ def features(env):
     return ϕ
 
 
-def initialize_critic_parameters():
-    return np.zeros((N_FEATURES,))
-
-
-def actor_critic(env, V, γ, λ, ϕ, ω, T=100):
-    π_net = Actor(hidden_dim=2 * N_FEATURES,
-                  n_layers=2)
+def actor_critic(env, γ, ϕ, T=100):
+    Q_net = Critic(hidden_dim=N_HIDDEN_FEAFURES,
+                   n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
-    state = create_train_state(π_net, rng)
+    Q_state = create_train_state(Q_net, rng, η=CRITIC_LEARNING_RATE)
     del rng
 
-    # For critic learning rate
-    N = {s: 0.0 for s in env.S}
+    π_net = Actor(hidden_dim=N_HIDDEN_FEAFURES,
+                  n_layers=N_HIDDEN_LAYERS)
+    rng = jax.random.key(0)
+    π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
+    del rng
 
     for _ in range(N_EPISODES):
         s = env.start
@@ -72,41 +71,38 @@ def actor_critic(env, V, γ, λ, ϕ, ω, T=100):
         z = {}
         for _ in range(T):
             x = ϕ[s]
-            a_logits = state.apply_fn({'params': state.params},
+            a_logits = π_state.apply_fn({'params': π_state.params},
                                         np.array([x]))[0]
-
-            # For floating pt error
-            a_logits = np.asarray(a_logits).astype(np.float64)
-            a_logits /= a_logits.sum()
-
-            a_idx = np.random.multinomial(1, pvals=a_logits)[0]
-
+            a_idx = np.random.multinomial(1, pvals=a_logits)
+            a_idx = np.argmax(a_idx)
             a = env.A[a_idx]
             r = env.R[s]
             s_prime = env.step(s, a)
 
             # Update critic
-            dt = temporal_difference(V, r, γ, ω, s, s_prime)
-            z[s] = z.get(s, 0.0) + 1.0
-            for sz in z.keys():
-                N[sz] += 1.0
-                η = critic_learning_rate(N[sz])
-                ω += η * z[sz] * dt * ϕ[sz]
-                z[sz] *= λ * γ
+            grads = compute_critic_gradients(Q_state, r, γ, np.array([x]),
+                                             np.array([ϕ[s_prime]]))
+            Q_state = Q_state.apply_gradients(grads=grads)
 
             # Update actor
-            grads = compute_gradients(state, np.array([x]), np.array([a_idx]))
-            grads = policy_gradient(grads, V(ω, s))
-            state = state.apply_gradients(grads=grads)
+            grads = compute_actor_gradients(π_state, np.array([x]),
+                                            np.array([a_idx]))
+            q_values = Q_state.apply_fn({'params': Q_state.params},
+                                        np.array([x]))[0]
+            q_value = q_values[a_idx]
+            grads = policy_gradient(grads, q_value)
+            π_state = π_state.apply_gradients(grads=grads)
+
+            # TODO copy network params after updates
 
             if env.is_terminal_state(s):
                 break
             s = s_prime
 
-    return state, ω
+    return state
 
 
-class Actor(nn.Module):
+class Critic(nn.Module):
     hidden_dim: int
     n_layers: int
 
@@ -115,9 +111,16 @@ class Actor(nn.Module):
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
-        x = nn.Dense(features=N_ACTIONS)(x)
+        q_values = nn.Dense(features=N_ACTIONS)(x)
+        return q_values
+
+
+class Actor(Critic):
+    @nn.compact
+    def __call__(self, x):
+        q_values = super().__call__(x)
         # Use softmax so output is probability of each action
-        logits = nn.softmax(x)
+        logits = nn.softmax(q_values)
         return logits
 
 
@@ -130,7 +133,7 @@ class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE, β1=0.9, β2=0.99):
+def create_train_state(π_net, rng, η, β1=0.9, β2=0.99):
     params = π_net.init(rng, jnp.ones([1, N_FEATURES]))['params']
     tx = optax.adam(η, β1, β2)
     return TrainState.create(
@@ -138,24 +141,22 @@ def create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE, β1=0.9, β2=0.99):
         metrics=Metrics.empty())
 
 
-def critic_learning_rate(t):
-    """Decaying learning rate.
-    
-    Using harmonic series since it meets Robbins-Monro conditions.
-    """
-    return 1.0 / t
-
-
-def temporal_difference(V, r, γ, ω, s, s_prime):
-    return r + γ * V(ω, s_prime) - V(ω, s)
+@jax.jit
+def compute_critic_gradients(Q_state, r, γ, x, x_prime):
+    def loss_fn(params):
+        q = Q_state.apply_fn({'params': params}, x)[0]
+        q_prime = Q_state.apply_fn({'params': params}, x_prime)[0]
+        return r + jnp.sum(γ * q_prime - q)
+    grad_fn = jax.grad(loss_fn)
+    grads = grad_fn(Q_state.params)
+    return grads
 
 
 @jax.jit
-def compute_gradients(state, x, a_idx):
+def compute_actor_gradients(state, x, a_idx):
     def loss_fn(params):
         a_logits = state.apply_fn({'params': params}, x)
-        a = jnp.take_along_axis(a_logits,
-                                jnp.expand_dims(a_idx, axis=-1),
+        a = jnp.take_along_axis(a_logits, jnp.expand_dims(a_idx, axis=-1),
                                 axis=1)
         return -jnp.sum(jnp.log(a))
     grad_fn = jax.grad(loss_fn)
@@ -190,20 +191,12 @@ if __name__ == '__main__':
 
     # Discount factor
     γ = 0.75
-    λ = 0.6
 
-    # Parameters for linear critic model
-    ω = initialize_critic_parameters()
+    actor_state, critic_state = actor_critic(env, γ, ϕ)
+    # π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
+    # V_opt = {s: V(ω_opt, s) for s in env.S}
 
-    # Initialize value function
-    def V(ω, s):
-        return ω @ ϕ[s]
-
-    opt_state, ω_opt = actor_critic(env, V, γ, λ, ϕ, ω)
-    π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
-    V_opt = {s: V(ω_opt, s) for s in env.S}
-
-    print('Optimal policy:')
-    print_grid(π_opt)
-    print('Optimal value function:')
-    print_grid(V_opt)
+    # print('Optimal policy:')
+    # print_grid(π_opt)
+    # print('Optimal value function:')
+    # print_grid(V_opt)

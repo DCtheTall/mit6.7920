@@ -114,11 +114,6 @@ class DQN(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        # Positional embedding to let the model also
-        # learn its own features for each state
-        pos = N_Y_COORDS * x[:,0] + x[:,1]
-        x += nn.Embed(num_embeddings=N_STATES,
-                      features=N_FEATURES)(pos.astype(jnp.int32))
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
