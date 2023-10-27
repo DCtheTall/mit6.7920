@@ -20,13 +20,11 @@ jax.config.update('jax_enable_x64', True)
 
 
 N_FEATURES = 8
-N_STATES = 16
-N_Y_COORDS = 4
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
-ACTOR_LEARNING_RATE = 1e-5
-CRITIC_LEARNING_RATE = 1e-4
+ACTOR_LEARNING_RATE = 1e-4
+CRITIC_LEARNING_RATE = 1e-3
 N_EPISODES = 10
 
 
@@ -43,8 +41,8 @@ def features(env):
             float(x), float(y), # position
             (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
             float(x + y), # L1 norm from origin
-            l2_goal, # L2 distance from goal
-            l2_fail, # L2 distance from failure
+            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
         ], dtype=np.float64)
@@ -69,19 +67,38 @@ def actor_critic(env, γ, ϕ, T=100):
 
     for _ in range(N_EPISODES):
         s = env.start
+        a = None
+        q_values, q = None, None
         for _ in range(T):
-            x = ϕ[s]
-            a_logits = π_state.apply_fn({'params': π_state.params},
-                                        np.array([x]))[0]
-            a_idx = np.random.multinomial(1, pvals=a_logits)
-            a_idx = np.argmax(a_idx)
-            a = env.A[a_idx]
+            if a is None:
+              x = ϕ[s]
+              a_logits = π_state.apply_fn({'params': π_state.params},
+                                          np.array([x]))[0]
+              a_idx = np.random.multinomial(1, pvals=a_logits)
+              a_idx = np.argmax(a_idx)
+              a = env.A[a_idx]
             r = env.R[s]
             s_prime = env.step(s, a)
+            x_prime = ϕ[s_prime]
+            a_prime_logits = π_state.apply_fn({'params': π_state.params},
+                                              np.array([x_prime]))[0]
+            a_prime_idx = np.random.multinomial(1, pvals=a_prime_logits)
+            a_prime_idx = np.argmax(a_prime_idx)
+            a_prime = env.A[a_prime_idx]
+
+            # Compute current Q values
+            if q_values is None:
+              q_values = Q_state.apply_fn({'params': Q_state.params},
+                                          np.array([x]))[0]
+              q = q_values[a_idx]
+            q_prime_values = Q_state.apply_fn({'params': Q_state.params},
+                                              np.array([x_prime]))[0]
+            q_prime = q_prime_values[a_prime_idx]
 
             # Update critic
-            grads = compute_critic_gradients(Q_state, r, γ, np.array([x]),
-                                             np.array([ϕ[s_prime]]))
+            dt = temporal_difference(r, γ, q, q_prime)
+            grads = compute_critic_gradients(Q_state, dt, np.array([x]),
+                                             np.array([a_idx]))
             Q_state = Q_state.apply_gradients(grads=grads)
             # Copy update to policy net
             π_state = copy_network_params(from_net=Q_state, to_net=π_state)
@@ -89,10 +106,7 @@ def actor_critic(env, γ, ϕ, T=100):
             # Update actor
             grads = compute_actor_gradients(π_state, np.array([x]),
                                             np.array([a_idx]))
-            q_values = Q_state.apply_fn({'params': Q_state.params},
-                                        np.array([x]))[0]
-            q_value = q_values[a_idx]
-            grads = policy_gradient(grads, q_value)
+            grads = policy_gradient(grads, q)
             π_state = π_state.apply_gradients(grads=grads)
             # Copy update to critic net
             Q_state = copy_network_params(from_net=π_state, to_net=Q_state)
@@ -100,6 +114,9 @@ def actor_critic(env, γ, ϕ, T=100):
             if env.is_terminal_state(s):
                 break
             s = s_prime
+            a = a_prime
+            q_values = q_prime_values
+            q = q_prime
 
     return π_state, Q_state
 
@@ -144,12 +161,16 @@ def create_train_state(π_net, rng, η, β1=0.9, β2=0.99):
         metrics=Metrics.empty())
 
 
+def temporal_difference(r, γ, q, q_prime):
+    return r - q + γ * q_prime
+
+
 @jax.jit
-def compute_critic_gradients(Q_state, r, γ, x, x_prime):
+def compute_critic_gradients(Q_state, dt, x, a_idx):
     def loss_fn(params):
-        q = Q_state.apply_fn({'params': params}, x)[0]
-        q_prime = Q_state.apply_fn({'params': params}, x_prime)[0]
-        return r + jnp.sum(γ * q_prime - q)
+        q = Q_state.apply_fn({'params': params}, x)
+        q = jnp.take_along_axis(q, jnp.expand_dims(a_idx, axis=-1), axis=1)
+        return -dt * jnp.sum(q)
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(Q_state.params)
     return grads

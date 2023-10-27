@@ -8,6 +8,16 @@ difference learning step. Instead it selects the next
 state's action by picking the action leading to
 the largest Q-value.
 
+Result:
+-------
+Converged after 59417 iterations
+Optimal policy:
+Action.Up	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Left	 Action.Left	 Action.Up
+Action.Up	 Action.Left	 Action.Left	 Action.Down
+Action.Right	 Action.Right	 Action.Left	 Action.Down
+Best first action: Action.Right
+
 """
 
 
@@ -70,7 +80,7 @@ def update_q_function(env, Q, N, π, γ, T=100):
 
 def learning_rate(t):
     """Decaying learning rate.
-    
+
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t

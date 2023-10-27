@@ -1,6 +1,13 @@
 """
-Example Linear Quadratic Resolver problem
+Example Linear Quadratic Resolver Problem
 =========================================
+
+Result:
+-------
+State feedback gains: [[0.16000626 0.4       ]]
+Optimal action for state (20, 0): [-3.2001252]
+Next state: [-20.00156494 -16.00062598]
+Next optimal action: [9.60062599]
 
 """
 

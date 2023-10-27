@@ -2,6 +2,18 @@
 Implementation of Linear Temporal Difference Learning
 =====================================================
 
+Result:
+-------
+Converged after 23876 iterations
+Optimal value function:
+0.31046747178948664	 0.5071062847309171	 0.5198902963294577	 3.871262610983604
+-0.3325531272310006	 -0.3689040577079704	 -0.8819454836249915	 -3.796414565562788
+-0.19498098188606003	 -0.2727660311042817	 -0.5563914380429362	 -0.8165590136993452
+0.06160465688481646	 -0.050828737704709685	 -0.22650545242896605	 -0.4194090843061706
+Optimal parameters:
+[ 0.58344505 -0.12527267 -0.13588442  0.4581726   0.38378023  0.32421862
+ -2.38124734  0.8099467 ]
+
 """
 
 import numpy as np
@@ -10,7 +22,7 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 
 
-N_FEATURES = 9
+N_FEATURES = 8
 
 
 def features(env):
@@ -26,11 +38,10 @@ def features(env):
             float(x), float(y), # position
             (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
             float(x + y), # L1 norm from origin
-            l2_goal, # L2 distance from goal
-            l2_fail, # L2 distance from failure
+            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-            float(env.is_terminal_state(s)),
         ], dtype=np.float32)
     return ϕ
 
@@ -91,7 +102,7 @@ def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
 
 def learning_rate(t):
     """Decaying learning rate.
-    
+
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t

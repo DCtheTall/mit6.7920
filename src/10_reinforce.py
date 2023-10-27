@@ -22,12 +22,10 @@ jax.config.update('jax_enable_x64', True)
 
 
 N_FEATURES = 8
-N_STATES = 16
-N_Y_COORDS = 4
 N_ACTIONS = 4
 LEARNING_RATE = 1e-4
-N_EPISODES_PER_UPDATE = 100
-TRAIN_STEPS = 10
+N_EPISODES_PER_UPDATE = 64
+TRAIN_STEPS = 1000
 
 
 def features(env):
@@ -43,8 +41,8 @@ def features(env):
             float(x), float(y), # position
             (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
             float(x + y), # L1 norm from origin
-            l2_goal, # L2 distance from goal
-            l2_fail, # L2 distance from failure
+            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
         ], dtype=np.float64)
@@ -87,7 +85,7 @@ def reinforce(env, γ, ϕ, T=100):
             all_grads.append(cur_grads)
             all_rewards.append(cur_rewards)
 
-        all_rewards = discount_and_normalize(all_rewards, γ)
+        all_rewards = discount_all_rewards(all_rewards, γ)
         grads = policy_gradient(all_grads, all_rewards)
         state = state.apply_gradients(grads=grads)
     return state
@@ -99,15 +97,13 @@ class PolicyNet(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        kernel_init = nn.initializers.normal(stddev=0.1)
+        x = nn.standardize(x)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim,
-                         dtype=jnp.float64,
-                         kernel_init=kernel_init)(x)
+                         dtype=jnp.float64)(x)
             x = nn.relu(x)
         x = nn.Dense(features=N_ACTIONS,
-                     dtype=jnp.float64,
-                     kernel_init=kernel_init)(x)
+                     dtype=jnp.float64)(x)
         # Use softmax so output is probability of each action
         logits = nn.softmax(x)
         return logits
@@ -143,15 +139,12 @@ def compute_gradients(state, x, a_idx):
     return grads
 
 
-def discount_and_normalize(all_rewards, γ):
-    all_discounted = [discounted_rewards(r, γ) for r in all_rewards]
-    flat_rewards = np.concatenate(all_discounted)
-    µ = np.mean(flat_rewards)
-    σ = np.std(flat_rewards)
-    return [(r - µ) / (σ + 1e-9) for r in all_discounted]
+def discount_all_rewards(all_rewards, γ):
+    all_discounted = [discount_rewards(r, γ) for r in all_rewards]
+    return all_discounted
 
 
-def discounted_rewards(rewards, γ):
+def discount_rewards(rewards, γ):
     result = [None] * len(rewards)
     r_sum = 0.0
     for i in range(len(rewards)-1, -1, -1):

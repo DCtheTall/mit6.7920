@@ -4,6 +4,15 @@ Implementation of TD(λ) with Elgibility Traces
 Implments TD(λ) for 4x4 Frozen Lake MDP.
 If you set λ=0, then this becomes TD(0).
 
+Result:
+-------
+Converged after 16006 iterations
+Optimal value function:
+0.033723677017174	 0.13119574526971972	 0.6235409823432285	 3.598167796718273
+0.0032197997971012207	 -0.01132062236114739	 -0.16839340098596253	 -3.680209919662842
+-0.005925147282414969	 -0.029736214449579194	 -0.14119541625028553	 -0.7290011110784664
+-0.00648537028429082	 -0.022989353956549052	 -0.08229763495664257	 -0.26665364084401494
+
 """
 
 import numpy as np
@@ -36,7 +45,7 @@ def random_policy(S, A):
 
 def learning_rate(t):
     """Decaying learning rate.
-    
+
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t

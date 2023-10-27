@@ -9,6 +9,16 @@ SARSA is an on-policy learning algorithm, meaning that it uses the
 same policy during exploration as it does for selecting the next
 action for temporal difference learning.
 
+Result:
+-------
+Converged after 127652 iterations
+Optimal policy:
+Action.Up	 Action.Up	 Action.Up	 Action.Right
+Action.Left	 Action.Left	 Action.Left	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Down	 Action.Down
+Best first action: Action.Left
+
 """
 
 import numpy as np
@@ -71,7 +81,7 @@ def update_q_function(env, Q, N, π, γ, T=100):
 
 def learning_rate(t):
     """Decaying learning rate.
-    
+
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t

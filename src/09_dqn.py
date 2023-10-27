@@ -1,7 +1,65 @@
 """
 Implementation of Deep Q Network (DQN)
 ======================================
-This file implements a simple DQN for GridWord using JAX.
+This file implements a simple DQN for 4x4 GridWord using JAX.
+
+Result:
+-------
+Optimal policy:
+Action.Right	 Action.Right	 Action.Up	 Action.Left
+Action.Right	 Action.Right	 Action.Left	 Action.Left
+Action.Up	 Action.Right	 Action.Right	 Action.Down
+Action.Right	 Action.Right	 Action.Right	 Action.Right
+Loss:
+0.5851697325706482
+0.038698699325323105
+0.025229347869753838
+0.11659318953752518
+0.026050325483083725
+0.1154707670211792
+0.07987924665212631
+0.12255693972110748
+0.9259278178215027
+0.6909330487251282
+0.6375937461853027
+0.06970922648906708
+0.07109434902667999
+0.18300622701644897
+0.2304687649011612
+0.13453637063503265
+0.1315186619758606
+0.09592777490615845
+0.08334122598171234
+0.10568971186876297
+0.14841288328170776
+0.5190666317939758
+0.5443905591964722
+0.04820887744426727
+Avg. Q Value:
+0.2959030866622925
+0.022004982456564903
+0.033189885318279266
+0.0678509920835495
+0.034410785883665085
+0.07644041627645493
+0.10203485935926437
+0.352797269821167
+0.08633407950401306
+0.3846694529056549
+0.38886791467666626
+0.17382757365703583
+0.33108335733413696
+0.13860435783863068
+0.2881055176258087
+0.3613390028476715
+0.14946387708187103
+0.3783504366874695
+0.3182215094566345
+0.129811093211174
+0.2277454435825348
+0.16887833178043365
+0.4026474952697754
+0.27707308530807495
 
 """
 
@@ -17,7 +75,7 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 
 
-N_FEATURES = 9
+N_FEATURES = 8
 LEARNING_RATE = 1e-3
 TRAIN_STEPS = 25000
 TRAIN_START = 1000
@@ -28,8 +86,6 @@ EPSILON_MAX = 1.0
 EPSILON_DECAY_STEPS = 15000
 LOG_N_STEPS = 1000
 COPY_N_STEPS = 250
-N_STATES = 16
-N_Y_COORDS = 4
 N_ACTIONS = 4
 
 
@@ -46,11 +102,10 @@ def features(env):
             float(x), float(y), # position
             (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
             float(x + y), # L1 norm from origin
-            l2_goal, # L2 distance from goal
-            l2_fail, # L2 distance from failure
+            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-            float(env.is_terminal_state(s)),
         ], dtype=np.float32)
     return ϕ
 
@@ -114,6 +169,7 @@ class DQN(nn.Module):
 
     @nn.compact
     def __call__(self, x):
+        x = nn.standardize(x)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)

@@ -2,7 +2,16 @@
 Implementation of Temporal Difference Learning
 ==============================================
 This module implements the TD(0) temporal difference learning
-algorithm.
+algorithm on 4x4 GridWorld.
+
+Result
+------
+Converged after 51532 iterations
+Optimal value function:
+0.03558420452683908	 0.14553204326752067	 0.7271529252075338	 3.7006573199626747
+-0.020292473258783614	 -0.1059785980464522	 -0.628945325113153	 -3.761018316313923
+-0.026037622223322402	 -0.08964090980207229	 -0.3308251262508127	 -0.9794353779104628
+-0.018588630231807134	 -0.05159745004991679	 -0.14571617209109242	 -0.31172628783363315
 
 """
 
@@ -59,7 +68,7 @@ def update_value_function(env, V, N, π, γ, T=100):
 
 def learning_rate(t):
     """Decaying learning rate.
-    
+
     Using harmonic series since it meets Robbins-Monro conditions.
     """
     return 1.0 / t
