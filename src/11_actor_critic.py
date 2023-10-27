@@ -19,15 +19,15 @@ from util.gridworld import GridWorld
 jax.config.update('jax_enable_x64', True)
 
 
-N_FEATURES = 9
+N_FEATURES = 8
 N_STATES = 16
 N_Y_COORDS = 4
 N_ACTIONS = 4
-N_HIDDEN_LAYERS = 4
-N_HIDDEN_FEAFURES = 2 * N_FEATURES
+N_HIDDEN_LAYERS = 2
+N_HIDDEN_FEAFURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-3
 CRITIC_LEARNING_RATE = 1e-3
-N_EPISODES = 1000
+N_EPISODES = 10
 
 
 def features(env):
@@ -47,18 +47,20 @@ def features(env):
             l2_fail, # L2 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-            float(env.is_terminal_state(s)),
         ], dtype=np.float64)
     return ϕ
 
 
 def actor_critic(env, γ, ϕ, T=100):
+    # Initialize critic first
     Q_net = Critic(hidden_dim=N_HIDDEN_FEAFURES,
                    n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
     Q_state = create_train_state(Q_net, rng, η=CRITIC_LEARNING_RATE)
     del rng
 
+    # Initialize actor but its parameters will be copied
+    # from the critic after the first step
     π_net = Actor(hidden_dim=N_HIDDEN_FEAFURES,
                   n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(0)
@@ -83,6 +85,8 @@ def actor_critic(env, γ, ϕ, T=100):
             grads = compute_critic_gradients(Q_state, r, γ, np.array([x]),
                                              np.array([ϕ[s_prime]]))
             Q_state = Q_state.apply_gradients(grads=grads)
+            # Copy update to policy net
+            π_state = copy_network_params(from_net=Q_state, to_net=π_state)
 
             # Update actor
             grads = compute_actor_gradients(π_state, np.array([x]),
@@ -92,14 +96,14 @@ def actor_critic(env, γ, ϕ, T=100):
             q_value = q_values[a_idx]
             grads = policy_gradient(grads, q_value)
             π_state = π_state.apply_gradients(grads=grads)
-
-            # TODO copy network params after updates
+            # Copy update to critic net
+            Q_state = copy_network_params(from_net=π_state, to_net=Q_state)
 
             if env.is_terminal_state(s):
                 break
             s = s_prime
 
-    return state
+    return π_state, Q_state
 
 
 class Critic(nn.Module):
@@ -174,13 +178,27 @@ def iterate_over_gradients(grads):
     return [(k1, k2) for k1 in grads.keys() for k2 in grads[k1].keys()]
 
 
-def optimal_policy(state, S, A, ϕ):
+def copy_network_params(from_net, to_net):
+    params = jax.tree_map(lambda x: x, from_net.params)
+    return to_net.replace(params=params)
+
+
+def optimal_policy(π_state, S, A, ϕ):
     π = {}
     for s in S:
         x = ϕ[s]
-        a_logits = state.apply_fn({'params': state.params}, np.array([x]))[0]
+        a_logits = π_state.apply_fn({'params': π_state.params}, np.array([x]))[0]
         π[s] = A[np.argmax(a_logits)]
     return π
+
+
+def optimal_value_function(Q_state, S, ϕ):
+    V = {}
+    for s in S:
+        x = ϕ[s]
+        q_values = Q_state.apply_fn({'params': Q_state.params}, np.array([x]))[0]
+        V[s] = np.max(q_values)
+    return V
 
 
 if __name__ == '__main__':
@@ -192,11 +210,11 @@ if __name__ == '__main__':
     # Discount factor
     γ = 0.75
 
-    actor_state, critic_state = actor_critic(env, γ, ϕ)
-    # π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
-    # V_opt = {s: V(ω_opt, s) for s in env.S}
+    π_state, Q_state = actor_critic(env, γ, ϕ)
+    π_opt = optimal_policy(π_state, env.S, env.A, ϕ)
+    V_opt = optimal_value_function(Q_state, env.S, ϕ)
 
-    # print('Optimal policy:')
-    # print_grid(π_opt)
-    # print('Optimal value function:')
-    # print_grid(V_opt)
+    print('Optimal policy:')
+    print_grid(π_opt)
+    print('Optimal value function:')
+    print_grid(V_opt)
