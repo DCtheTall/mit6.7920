@@ -25,7 +25,7 @@ N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-4
 CRITIC_LEARNING_RATE = 1e-3
-N_EPISODES = 10
+N_EPISODES = 100
 
 
 def features(env):
@@ -86,7 +86,7 @@ def actor_critic(env, γ, ϕ, T=100):
             a_prime_idx = np.argmax(a_prime_idx)
             a_prime = env.A[a_prime_idx]
 
-            # Compute current Q values
+            # Compute current Q values 
             if q_values is None:
               q_values = Q_state.apply_fn({'params': Q_state.params},
                                           np.array([x]))[0]
@@ -104,9 +104,8 @@ def actor_critic(env, γ, ϕ, T=100):
             π_state = copy_network_params(from_net=Q_state, to_net=π_state)
 
             # Update actor
-            grads = compute_actor_gradients(π_state, np.array([x]),
+            grads = compute_actor_gradients(π_state, q, np.array([x]),
                                             np.array([a_idx]))
-            grads = policy_gradient(grads, q)
             π_state = π_state.apply_gradients(grads=grads)
             # Copy update to critic net
             Q_state = copy_network_params(from_net=π_state, to_net=Q_state)
@@ -177,25 +176,19 @@ def compute_critic_gradients(Q_state, dt, x, a_idx):
 
 
 @jax.jit
-def compute_actor_gradients(state, x, a_idx):
+def compute_actor_gradients(state, q, x, a_idx):
     def loss_fn(params):
         a_logits = state.apply_fn({'params': params}, x)
         a = jnp.take_along_axis(a_logits, jnp.expand_dims(a_idx, axis=-1),
                                 axis=1)
-        return -jnp.sum(jnp.log(a))
+        return q * jax.lax.cond(
+            q < 0.0,
+            lambda: jnp.sum(jnp.log(1.0 - a)),
+            lambda: -jnp.sum(jnp.log(a)),
+        )
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(state.params)
     return grads
-
-
-def policy_gradient(grads, reward):
-    for k1, k2 in iterate_over_gradients(grads):
-        grads[k1][k2] *= reward
-    return grads
-
-
-def iterate_over_gradients(grads):
-    return [(k1, k2) for k1 in grads.keys() for k2 in grads[k1].keys()]
 
 
 def copy_network_params(from_net, to_net):

@@ -2,8 +2,15 @@
 Implementation of REINFORCE Policy Gradient Algorithm
 =====================================================
 Implementation of REINFORCE policy gradient learning algorithm
-for GridWorld 4x4. Due to the high variance of this algorithm it
-fails to converge to a result.
+for GridWorld 4x4.
+
+Result:
+-------
+Optimal policy:
+Action.Up	 Action.Up	 Action.Up	 Action.Up	
+Action.Up	 Action.Left	 Action.Left	 Action.Left	
+Action.Left	 Action.Left	 Action.Left	 Action.Down	
+Action.Left	 Action.Left	 Action.Left	 Action.Down
 
 """
 
@@ -25,7 +32,7 @@ N_FEATURES = 8
 N_ACTIONS = 4
 LEARNING_RATE = 1e-2
 N_EPISODES_PER_UPDATE = 100
-TRAIN_STEPS = 5
+TRAIN_STEPS = 25
 
 
 def features(env):
