@@ -23,9 +23,9 @@ jax.config.update('jax_enable_x64', True)
 
 N_FEATURES = 8
 N_ACTIONS = 4
-LEARNING_RATE = 1e-4
-N_EPISODES_PER_UPDATE = 64
-TRAIN_STEPS = 1000
+LEARNING_RATE = 1e-2
+N_EPISODES_PER_UPDATE = 100
+TRAIN_STEPS = 5
 
 
 def features(env):
@@ -58,10 +58,10 @@ def reinforce(env, γ, ϕ, T=100):
 
     for _ in range(TRAIN_STEPS):
         all_rewards = []
-        all_grads = []
+        all_grad_inputs = []
         for _ in range(N_EPISODES_PER_UPDATE):
             cur_rewards = []
-            cur_grads = []
+            cur_grad_inputs = []
             s = env.start
             for _ in range(T):
                 x = ϕ[s]
@@ -69,9 +69,7 @@ def reinforce(env, γ, ϕ, T=100):
                                           np.array([x]))[0]
                 a_idx = np.random.multinomial(1, pvals=a_logits)
                 a_idx = np.argmax(a_idx)
-                grads = compute_gradients(state, np.array([x]),
-                                          np.array([a_idx]))
-                cur_grads.append(grads)
+                cur_grad_inputs.append((x, a_idx))
 
                 a = env.A[a_idx]
                 s_prime = env.step(s, a)
@@ -82,11 +80,11 @@ def reinforce(env, γ, ϕ, T=100):
                 if env.is_terminal_state(s_prime):
                     break
                 s = s_prime
-            all_grads.append(cur_grads)
+            all_grad_inputs.append(cur_grad_inputs)
             all_rewards.append(cur_rewards)
 
         all_rewards = discount_all_rewards(all_rewards, γ)
-        grads = policy_gradient(all_grads, all_rewards)
+        grads = mean_policy_gradient(state, all_rewards, all_grad_inputs)
         state = state.apply_gradients(grads=grads)
     return state
 
@@ -126,19 +124,6 @@ def create_train_state(π_net, rng, η=LEARNING_RATE, β1=0.9, β2=0.99):
         metrics=Metrics.empty())
 
 
-@jax.jit
-def compute_gradients(state, x, a_idx):
-    def loss_fn(params):
-        a_logits = state.apply_fn({'params': params}, x)
-        a = jnp.take_along_axis(a_logits,
-                                jnp.expand_dims(a_idx, axis=-1),
-                                axis=1)
-        return -jnp.sum(jnp.log(a))
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(state.params)
-    return grads
-
-
 def discount_all_rewards(all_rewards, γ):
     all_discounted = [discount_rewards(r, γ) for r in all_rewards]
     return all_discounted
@@ -154,19 +139,39 @@ def discount_rewards(rewards, γ):
     return result
 
 
-def policy_gradient(all_grads, all_rewards):
-    acc = {}
-    m = len(all_grads)
-    for cur_grads, cur_rewards in zip(all_grads, all_rewards):
-        n = len(cur_grads) * m
-        for grads, reward in zip(cur_grads, cur_rewards):
-            for k1, k2 in iterate_over_gradients(grads):
-                if k1 not in acc:
-                    acc[k1] = {}
-                if k2 not in acc[k1]:
-                    acc[k1][k2] = np.zeros(shape=grads[k1][k2].shape)
-                acc[k1][k2] += reward * grads[k1][k2] / n
-    return acc
+def mean_policy_gradient(state, all_rewards, all_grad_inputs):
+    grads = {}
+    m = len(all_rewards)
+    for cur_rewards, cur_grad_inputs in zip(all_rewards,
+                                            all_grad_inputs):
+        n = m * len(cur_rewards)
+        for r, (x, a_idx) in zip(cur_rewards, cur_grad_inputs):
+            cur_grads = policy_gradient(state, r, np.array([x]), np.array([a_idx]))
+            for k1, k2 in iterate_over_gradients(cur_grads):
+                if k1 not in grads:
+                    grads[k1] = {}
+                if k2 not in grads[k1]:
+                    grads[k1][k2] = np.zeros(cur_grads[k1][k2].shape)
+                grads[k1][k2] += cur_grads[k1][k2] / n
+    return grads
+
+
+
+@jax.jit
+def policy_gradient(state, r, x, a_idx):
+    def loss_fn(params):
+        a_logits = state.apply_fn({'params': params}, x)
+        a = jnp.take_along_axis(a_logits,
+                                jnp.expand_dims(a_idx, axis=-1),
+                                axis=1)
+        return r * jax.lax.cond(
+            r < 0.0,
+            lambda: jnp.sum(jnp.log(1.0 - a)),
+            lambda: -jnp.sum(jnp.log(a)),
+        )
+    grad_fn = jax.grad(loss_fn)
+    grads = grad_fn(state.params)
+    return grads
 
 
 def iterate_over_gradients(grads):
