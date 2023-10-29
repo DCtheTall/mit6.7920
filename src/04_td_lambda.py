@@ -3,6 +3,7 @@ Implementation of TD(λ) with Elgibility Traces
 ==============================================
 Implments TD(λ) for 4x4 Frozen Lake MDP.
 If you set λ=0, then this becomes TD(0).
+If you set λ=1, then this becomes Monte Carlo value iteration.
 
 Result:
 -------

@@ -1,6 +1,6 @@
 """
-Implementation of Actor-Critic with Advantage Function (A2C)
-============================================================
+Implementation of Advantage Actor-Critic (A2C)
+==============================================
 This implementation uses Jax to implement A2C with
 Generalized Advantage Estimation (GAE).
 
@@ -66,7 +66,6 @@ def a2c(env, γ, λ, ϕ, T=100):
 
     for _ in range(N_EPISODES):
         s = env.start
-        v = None
         # Eligibility traces
         z = {}
         for _ in range(T):
@@ -80,12 +79,11 @@ def a2c(env, γ, λ, ϕ, T=100):
             s_prime = env.step(s, a)
             x_prime = ϕ[s_prime]
 
-            if v is None:
-                v = V_state.apply_fn({'params': V_state.params},
-                                     np.array([x]))[0][0]
-            v_prime = V_state.apply_fn({'params': V_state.params},
-                                       np.array([x_prime]))[0][0]
-            
+            v_out = V_state.apply_fn({'params': V_state.params},
+                                     np.array([x, x_prime]))
+            v = v_out[0][0]
+            v_prime = v_out[1][0]
+
             dt = temporal_difference(r, γ, v, v_prime)
 
             # Update critic using GAE, which uses TD(λ) updates
@@ -109,7 +107,6 @@ def a2c(env, γ, λ, ϕ, T=100):
             if env.is_terminal_state(s):
                 break
             s = s_prime
-            v = v_prime
     return π_state, V_state
 
 
@@ -138,8 +135,7 @@ class Critic(NetworkBase):
     @nn.compact
     def __call__(self, x):
         x = super().__call__(x)
-        x = nn.Dense(1)(x)
-        return x
+        return jnp.sum(x)
 
 
 @struct.dataclass
@@ -151,9 +147,9 @@ class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_train_state(net, rng, η, β1=0.9, β2=0.99):
+def create_train_state(net, rng, η):
     params = net.init(rng, jnp.ones([1, N_FEATURES]))['params']
-    tx = optax.adam(η, β1, β2)
+    tx = optax.sgd(η)
     return TrainState.create(
         apply_fn=net.apply, params=params, tx=tx,
         metrics=Metrics.empty())
@@ -190,12 +186,8 @@ def compute_actor_gradients(state, dt, x, a_idx):
 
 
 def copy_network_params(from_net, to_net):
-    from_params = from_net.params.copy()
-    to_params = to_net.params.copy()
-    for k in from_params.keys():
-        if k in to_params:
-            to_params[k] = from_params[k].copy()
-    return to_net.replace(params=to_params)
+    params = jax.tree_map(lambda x: x, from_net.params)
+    return to_net.replace(params=params)
 
 
 def optimal_policy(π_state, S, A, ϕ):

@@ -21,11 +21,11 @@ jax.config.update('jax_enable_x64', True)
 
 N_FEATURES = 8
 N_ACTIONS = 4
-N_HIDDEN_LAYERS = 4
+N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
-ACTOR_LEARNING_RATE = 1e-4
-CRITIC_LEARNING_RATE = 1e-3
-N_EPISODES = 200
+ACTOR_LEARNING_RATE = 1e-3
+CRITIC_LEARNING_RATE = 1e-2
+N_EPISODES = 1000
 
 
 def features(env):
@@ -67,16 +67,13 @@ def actor_critic(env, γ, ϕ, T=100):
 
     for _ in range(N_EPISODES):
         s = env.start
-        a = None
-        q_values, q = None, None
         for _ in range(T):
-            if a is None:
-                x = ϕ[s]
-                a_logits = π_state.apply_fn({'params': π_state.params},
-                                            np.array([x]))[0]
-                a_idx = np.random.multinomial(1, pvals=a_logits)
-                a_idx = np.argmax(a_idx)
-                a = env.A[a_idx]
+            x = ϕ[s]
+            a_logits = π_state.apply_fn({'params': π_state.params},
+                                        np.array([x]))[0]
+            a_idx = np.random.multinomial(1, pvals=a_logits)
+            a_idx = np.argmax(a_idx)
+            a = env.A[a_idx]
             r = env.R[s]
             s_prime = env.step(s, a)
             x_prime = ϕ[s_prime]
@@ -84,16 +81,12 @@ def actor_critic(env, γ, ϕ, T=100):
                                               np.array([x_prime]))[0]
             a_prime_idx = np.random.multinomial(1, pvals=a_prime_logits)
             a_prime_idx = np.argmax(a_prime_idx)
-            a_prime = env.A[a_prime_idx]
 
             # Compute current Q values
-            if q_values is None:
-                q_values = Q_state.apply_fn({'params': Q_state.params},
-                                            np.array([x]))[0]
-                q = q_values[a_idx]
-            q_prime_values = Q_state.apply_fn({'params': Q_state.params},
-                                              np.array([x_prime]))[0]
-            q_prime = q_prime_values[a_prime_idx]
+            q_values = Q_state.apply_fn({'params': Q_state.params},
+                                        np.array([x, x_prime]))
+            q = q_values[0][a_idx]
+            q_prime = q_values[1][a_prime_idx]
 
             # Update critic
             dt = temporal_difference(r, γ, q, q_prime)
@@ -113,9 +106,6 @@ def actor_critic(env, γ, ϕ, T=100):
             if env.is_terminal_state(s):
                 break
             s = s_prime
-            a = a_prime
-            q_values = q_prime_values
-            q = q_prime
 
     return π_state, Q_state
 
@@ -151,11 +141,11 @@ class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_train_state(π_net, rng, η, β1=0.9, β2=0.99):
-    params = π_net.init(rng, jnp.ones([1, N_FEATURES]))['params']
-    tx = optax.adam(η, β1, β2)
+def create_train_state(net, rng, η):
+    params = net.init(rng, jnp.ones([1, N_FEATURES]))['params']
+    tx = optax.sgd(η)
     return TrainState.create(
-        apply_fn=π_net.apply, params=params, tx=tx,
+        apply_fn=net.apply, params=params, tx=tx,
         metrics=Metrics.empty())
 
 
