@@ -4,6 +4,19 @@ Implementation of Advantage Actor-Critic (A2C)
 This implementation uses Jax to implement A2C with
 Generalized Advantage Estimation (GAE).
 
+Result:
+-------
+Optimal policy:
+Action.Up	 Action.Up	 Action.Up	 Action.Down
+Action.Up	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Down	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Optimal value function:
+0.048049465	 0.028313711	 0.7294688	 3.4895468
+-0.026506033	 -0.06699917	 -0.20350263	 -3.7429316
+-0.07243951	 -0.07243951	 -0.11969583	 -0.3646946
+-0.07243951	 -0.07243951	 -0.07243951	 -0.17680573
+
 """
 
 from clu import metrics
@@ -22,9 +35,9 @@ N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
-ACTOR_LEARNING_RATE = 1e-5
-CRITIC_LEARNING_RATE = 1e-3
-N_EPISODES = 25
+ACTOR_LEARNING_RATE = 1e-2
+CRITIC_LEARNING_RATE = 1e-2
+N_EPISODES = 500
 
 
 def features(env):
@@ -81,8 +94,8 @@ def a2c(env, γ, λ, ϕ, T=100):
 
             v_out = V_state.apply_fn({'params': V_state.params},
                                      np.array([x, x_prime]))
-            v = v_out[0][0]
-            v_prime = v_out[1][0]
+            v = v_out[0]
+            v_prime = v_out[1]
 
             dt = temporal_difference(r, γ, v, v_prime)
 
@@ -135,7 +148,7 @@ class Critic(NetworkBase):
     @nn.compact
     def __call__(self, x):
         x = super().__call__(x)
-        return jnp.sum(x)
+        return jnp.sum(x, axis=-1)
 
 
 @struct.dataclass
@@ -203,7 +216,7 @@ def optimal_value_function(V_state, S, ϕ):
     V = {}
     for s in S:
         x = ϕ[s]
-        v = V_state.apply_fn({'params': V_state.params}, np.array([x]))[0][0]
+        v = V_state.apply_fn({'params': V_state.params}, np.array([x]))[0]
         V[s] = v
     return V
 

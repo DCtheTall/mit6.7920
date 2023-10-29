@@ -1,7 +1,20 @@
 """
 Implementation of Actor-Critic
 ==============================
-This file implements vanilla Actor-Critic
+This file implements vanilla Actor-Critic using shared neural network parameters.
+
+Result
+------
+Optimal policy:
+Action.Up	 Action.Up	 Action.Up	 Action.Right
+Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Optimal value function:
+0.08430933242822322	 0.08940356690056997	 0.5614460123633344	 3.821244212027544
+-0.04222912847820936	 -0.14218197020008055	 -0.16930380575396178	 -4.074084953006361
+-0.04124804958701134	 -0.16795739672449456	 -0.37611593747602107	 -1.1491203330213537
+-0.04124804958701134	 -0.06179717999783432	 -0.29365980060279456	 -0.5550488281583664
 
 """
 
