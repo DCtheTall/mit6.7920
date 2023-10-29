@@ -18,15 +18,13 @@ Optimal value function:
 
 """
 
-from clu import metrics
-from flax import struct
 import flax.linen as nn
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from util.display import print_grid
+from util.jax import MLP, Metrics, TrainState
 from util.gridworld import GridWorld
 
 jax.config.update('jax_enable_x64', True)
@@ -129,9 +127,8 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        for _ in range(self.n_layers):
-            x = nn.Dense(features=self.hidden_dim)(x)
-            x = nn.relu(x)
+        x = MLP(features=self.hidden_dim,
+                n_layers=self.n_layers)(x)
         q_values = nn.Dense(features=N_ACTIONS)(x)
         return q_values
 
@@ -143,15 +140,6 @@ class Actor(Critic):
         # Use softmax so output is probability of each action
         logits = nn.softmax(q_values)
         return logits
-
-
-@struct.dataclass
-class Metrics(metrics.Collection):
-    loss: metrics.Average.from_output('loss')
-
-
-class TrainState(train_state.TrainState):
-    metrics: Metrics
 
 
 def create_train_state(net, rng, η):

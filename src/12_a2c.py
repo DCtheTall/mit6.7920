@@ -19,15 +19,13 @@ Optimal value function:
 
 """
 
-from clu import metrics
-from flax import struct
 import flax.linen as nn
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from util.display import print_grid
+from util.jax import MLP, Metrics, TrainState
 from util.gridworld import GridWorld
 
 
@@ -129,9 +127,8 @@ class NetworkBase(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        for _ in range(self.n_layers):
-            x = nn.Dense(features=self.hidden_dim)(x)
-            x = nn.relu(x)
+        x = MLP(features=self.hidden_dim,
+                n_layers=self.n_layers)(x)
         x = nn.Dense(features=N_ACTIONS)(x)
         return x
 
@@ -149,15 +146,6 @@ class Critic(NetworkBase):
     def __call__(self, x):
         x = super().__call__(x)
         return jnp.sum(x, axis=-1)
-
-
-@struct.dataclass
-class Metrics(metrics.Collection):
-    loss: metrics.Average.from_output('loss')
-
-
-class TrainState(train_state.TrainState):
-    metrics: Metrics
 
 
 def create_train_state(net, rng, η):

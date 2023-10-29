@@ -36,7 +36,7 @@ class GridWorld:
     goal: State
     failure: State
     # List of all actions
-    A: List[Action]
+    A: Actions
     # Transition probabilities
     P: Transitions
     # Rewards

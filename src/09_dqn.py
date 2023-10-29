@@ -73,6 +73,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from util.display import print_grid
+from util.jax import MLP, Metrics as MetricsBase
 from util.gridworld import GridWorld
 
 
@@ -170,9 +171,8 @@ class DQN(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        for _ in range(self.n_layers):
-            x = nn.Dense(features=self.hidden_dim)(x)
-            x = nn.relu(x)
+        x = MLP(features=self.hidden_dim,
+                n_layers=self.n_layers)(x)
         x = nn.Dense(features=N_ACTIONS)(x)
         return x
 
@@ -206,8 +206,7 @@ class ReplayMemory:
 
 
 @struct.dataclass
-class Metrics(metrics.Collection):
-    loss: metrics.Average.from_output('loss')
+class Metrics(MetricsBase):
     avg_q_value: metrics.Average.from_output('avg_q_value')
 
 

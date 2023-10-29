@@ -14,15 +14,14 @@ Action.Left	 Action.Left	 Action.Left	 Action.Down
 
 """
 
-from clu import metrics
-from flax import struct
+import copy
 import flax.linen as nn
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from util.display import print_grid
+from util.jax import MLP, Metrics, TrainState
 from util.gridworld import GridWorld
 
 jax.config.update('jax_enable_x64', True)
@@ -102,24 +101,13 @@ class PolicyNet(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        for _ in range(self.n_layers):
-            x = nn.Dense(features=self.hidden_dim,
-                         dtype=jnp.float64)(x)
-            x = nn.relu(x)
+        x = MLP(features=self.hidden_dim,
+                n_layers=self.n_layers)(x)
         x = nn.Dense(features=N_ACTIONS,
                      dtype=jnp.float64)(x)
         # Use softmax so output is probability of each action
         logits = nn.softmax(x)
         return logits
-
-
-@struct.dataclass
-class Metrics(metrics.Collection):
-    loss: metrics.Average.from_output('loss')
-
-
-class TrainState(train_state.TrainState):
-    metrics: Metrics
 
 
 def create_train_state(π_net, rng, η=LEARNING_RATE, β1=0.9, β2=0.99):
@@ -146,19 +134,18 @@ def discount_rewards(rewards, γ):
 
 
 def mean_policy_gradient(state, all_rewards, all_grad_inputs):
-    grads = {}
+    grads = None
     m = len(all_rewards)
     for cur_rewards, cur_grad_inputs in zip(all_rewards,
                                             all_grad_inputs):
         n = m * len(cur_rewards)
         for r, (x, a_idx) in zip(cur_rewards, cur_grad_inputs):
             cur_grads = policy_gradient(state, r, np.array([x]), np.array([a_idx]))
-            for k1, k2 in iterate_over_gradients(cur_grads):
-                if k1 not in grads:
-                    grads[k1] = {}
-                if k2 not in grads[k1]:
-                    grads[k1][k2] = np.zeros(cur_grads[k1][k2].shape)
-                grads[k1][k2] += cur_grads[k1][k2] / n
+            if grads is None:
+                grads = copy.deepcopy(cur_grads)
+                grads = jax.tree_map(lambda x: x / n, grads)
+            else:
+                grads = jax.tree_map(lambda x, y: x + y / n, grads, cur_grads)
     return grads
 
 
@@ -178,10 +165,6 @@ def policy_gradient(state, r, x, a_idx):
     grad_fn = jax.grad(loss_fn)
     grads = grad_fn(state.params)
     return grads
-
-
-def iterate_over_gradients(grads):
-    return [(k1, k2) for k1 in grads.keys() for k2 in grads[k1].keys()]
 
 
 def optimal_policy(state, S, A, ϕ):
