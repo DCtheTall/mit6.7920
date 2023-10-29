@@ -7,9 +7,9 @@ for GridWorld 4x4.
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up	
-Action.Up	 Action.Left	 Action.Left	 Action.Left	
-Action.Left	 Action.Left	 Action.Left	 Action.Down	
+Action.Up	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Up	 Action.Left	 Action.Left
+Action.Up	 Action.Left	 Action.Left	 Action.Down
 Action.Left	 Action.Left	 Action.Left	 Action.Down
 
 """
@@ -32,7 +32,7 @@ N_FEATURES = 8
 N_ACTIONS = 4
 LEARNING_RATE = 1e-2
 N_EPISODES_PER_UPDATE = 100
-TRAIN_STEPS = 25
+TRAIN_STEPS = 75
 
 
 def features(env):
@@ -102,7 +102,6 @@ class PolicyNet(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        x = nn.standardize(x)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim,
                          dtype=jnp.float64)(x)

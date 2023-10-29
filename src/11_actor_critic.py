@@ -21,11 +21,11 @@ jax.config.update('jax_enable_x64', True)
 
 N_FEATURES = 8
 N_ACTIONS = 4
-N_HIDDEN_LAYERS = 2
+N_HIDDEN_LAYERS = 4
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-4
 CRITIC_LEARNING_RATE = 1e-3
-N_EPISODES = 100
+N_EPISODES = 200
 
 
 def features(env):
@@ -86,7 +86,7 @@ def actor_critic(env, γ, ϕ, T=100):
             a_prime_idx = np.argmax(a_prime_idx)
             a_prime = env.A[a_prime_idx]
 
-            # Compute current Q values 
+            # Compute current Q values
             if q_values is None:
               q_values = Q_state.apply_fn({'params': Q_state.params},
                                           np.array([x]))[0]
@@ -126,7 +126,6 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        x = nn.standardize(x)
         for _ in range(self.n_layers):
             x = nn.Dense(features=self.hidden_dim)(x)
             x = nn.relu(x)
