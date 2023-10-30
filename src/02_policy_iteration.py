@@ -25,11 +25,13 @@ from util.display import print_grid
 from util.gridworld import Action, GridWorld
 
 
-def policy_iteration(S, A, R, P, V, γ, π):
+def policy_iteration(S, A, R, P, V, γ):
     """Value iteration algorithm implementation
 
     Complexity: O(S^2 * A)
     """
+    # Initialize stationary policy
+    π = {s: Action.Right for s in S}
     n_iter = 0
     while True:
         n_iter += 1
@@ -98,11 +100,8 @@ if __name__ == '__main__':
     # Discount factor
     γ = 0.75
 
-    # Initialize stationary policy
-    π = {s: Action.Right for s in S}
-
     # Apply policy iteration
-    V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, V, γ, π)
+    V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, V, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')

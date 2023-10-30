@@ -4,6 +4,10 @@ Implementation of Advantage Actor-Critic (A2C)
 This implementation uses Jax to implement A2C with
 Generalized Advantage Estimation (GAE).
 
+A2C was invented after Asynchronous Advantage Actor-Critic
+(aka A3C), and is found to be just as good for learning
+and more data efficient than A3C.
+
 Result:
 -------
 Optimal policy:
@@ -171,9 +175,9 @@ def compute_critic_gradients(V_state, z, dt, x):
 
 
 @jax.jit
-def compute_actor_gradients(state, dt, x, a_idx):
+def compute_actor_gradients(π_state, dt, x, a_idx):
     def loss_fn(params):
-        a_logits = state.apply_fn({'params': params}, x)
+        a_logits = π_state.apply_fn({'params': params}, x)
         a = jnp.take_along_axis(a_logits, jnp.expand_dims(a_idx, axis=-1),
                                 axis=1)
         return dt * jax.lax.cond(
@@ -182,7 +186,7 @@ def compute_actor_gradients(state, dt, x, a_idx):
             lambda: -jnp.sum(jnp.log(a)),
         )
     grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(state.params)
+    grads = grad_fn(π_state.params)
     return grads
 
 

@@ -25,11 +25,13 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 
 
-def value_iteration(S, A, R, P, V, γ):
+def value_iteration(S, A, R, P, γ):
     """Value iteration algorithm implementation
 
     Complexity: O(S^2 * A)
     """
+    # Initialize value function
+    V = {s: 0.0 for s in S}
     n_iter = 0
     while True:
         n_iter += 1
@@ -94,14 +96,11 @@ if __name__ == '__main__':
     # Rewards
     R = env.R
 
-    # Initialize value function
-    V = {s: 0.0 for s in S}
-
     # Discount factor
     γ = 0.75
 
     # Apply value iteration
-    V_opt, n_iter = value_iteration(S, A, R, P, V, γ)
+    V_opt, n_iter = value_iteration(S, A, R, P, γ)
 
     # Derive optimal policy from value function using the optimal
     # Bellman operator.
