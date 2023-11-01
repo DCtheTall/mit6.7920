@@ -30,7 +30,7 @@ jax.config.update('jax_enable_x64', True)
 N_FEATURES = 8
 N_ACTIONS = 4
 LEARNING_RATE = 1e-2
-N_EPISODES_PER_UPDATE = 100
+N_TRAJECTORIES_PER_UPDATE = 100
 TRAIN_STEPS = 75
 
 
@@ -65,7 +65,7 @@ def reinforce(env, γ, ϕ, T=100):
     for _ in range(TRAIN_STEPS):
         all_rewards = []
         all_grad_inputs = []
-        for _ in range(N_EPISODES_PER_UPDATE):
+        for _ in range(N_TRAJECTORIES_PER_UPDATE):
             cur_rewards = []
             cur_grad_inputs = []
             s = env.start

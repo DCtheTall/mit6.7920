@@ -32,6 +32,8 @@ from util.display import print_grid
 from util.jax import MLP, Metrics, TrainState
 from util.gridworld import GridWorld
 
+jax.config.update('jax_enable_x64', True)
+
 
 N_FEATURES = 8
 N_ACTIONS = 4
@@ -39,7 +41,7 @@ N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-2
 CRITIC_LEARNING_RATE = 1e-2
-N_EPISODES = 500
+N_TRAJECTORIES = 500
 
 
 def features(env):
@@ -79,7 +81,7 @@ def a2c(env, γ, λ, ϕ, T=100):
     π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
     del rng
 
-    for _ in range(N_EPISODES):
+    for _ in range(N_TRAJECTORIES):
         s = env.start
         # Eligibility traces
         z = {}

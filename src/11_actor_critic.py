@@ -36,7 +36,7 @@ N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-3
 CRITIC_LEARNING_RATE = 1e-2
-N_EPISODES = 1000
+N_TRAJECTORIES = 1000
 
 
 def features(env):
@@ -76,7 +76,7 @@ def actor_critic(env, γ, ϕ, T=100):
     π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
     del rng
 
-    for _ in range(N_EPISODES):
+    for _ in range(N_TRAJECTORIES):
         s = env.start
         for _ in range(T):
             x = ϕ[s]
