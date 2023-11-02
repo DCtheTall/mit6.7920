@@ -31,9 +31,6 @@ from util.gridworld import GridWorld
 
 
 def conservative_policy_iteration(env, γ, Ɛ):
-    # GridWorld's starting state is stationary.
-    µ = start_state_distribution(env)
-
     π, P_π = init_stochastic_policy(env.S, env.A, env.P)
 
     n_iter = 0
@@ -43,7 +40,7 @@ def conservative_policy_iteration(env, γ, Ɛ):
         V_π = value_iteration_for_policy(env.S, env.R, P_π, γ)
         Q_π = q_function_for_policy(env.S, env.A, env.R, env.P, V_π)
         A_π = advantage_function(Q_π, V_π)
-        d_π = discounted_future_state_distribution(env.S, P_π, µ, γ)
+        d_π = discounted_future_state_distribution(env.S, P_π, env.µ, γ)
         
         # Compute new policy and its advantage over current one
         π_prime, P_π_prime = epsilon_greedy_policy(env.S, env.A, env.P, A_π, Ɛ)

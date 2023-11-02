@@ -27,6 +27,7 @@ States = Set[State]
 Actions = List[Action]
 Transitions = Dict[Tuple[State, Action, State], float]
 Rewards = Dict[State, float]
+StartingStateDist = Dict[State, float]
 
 
 class GridWorld:
@@ -41,6 +42,8 @@ class GridWorld:
     P: Transitions
     # Rewards
     R: Rewards
+    # Starting state distribution
+    µ: StartingStateDist
 
     def __init__(self,
                  size: int,
@@ -65,6 +68,7 @@ class GridWorld:
         self.R = {s: 0.0 for s in self.S}
         self.R[self.goal] = goal_reward
         self.R[self.failure] = failure_reward
+        self.µ = {s: float(s == self.start) for s in self.S}
 
     def step(self, s: State, a: Action) -> State:
         """Sample next state given state and action"""
