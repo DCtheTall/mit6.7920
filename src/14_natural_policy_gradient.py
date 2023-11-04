@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import random
 from util.display import print_grid
 from util.gridworld import GridWorld
 from util.jax import MLP, Metrics, TrainState
@@ -20,10 +21,11 @@ N_FEATURES = 8
 N_HIDDEN_FEAFURES = 4 * N_FEATURES
 N_HIDDEN_LAYERS = 2
 N_ACTIONS = 4
-CRITIC_LEARNING_RATE = 1e-2
-ACTOR_LEARNING_RATE = 1e-2
-N_TRAJECTORIES = 3
+LEARNING_RATE = 1e-2
+TRAIN_STEPS = 1
+N_TRAJECTORIES_PER_STEP = 10
 MAX_STEPS_PER_TRAJECTORY = 100
+N_VALUE_ESTIMATE_ITERATIONS = 100
 
 
 def features(env):
@@ -49,61 +51,46 @@ def features(env):
 
 def natural_policy_gradient(env, γ, λ, δ, ϕ):
     # Initialize actor
-    π_net = Actor(hidden_dim=N_HIDDEN_FEAFURES,
-                  n_layers=N_HIDDEN_LAYERS)
+    π_net = PolicyNet(hidden_dim=N_HIDDEN_FEAFURES,
+                      n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
-    π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
+    π_state = create_train_state(π_net, rng, η=LEARNING_RATE)
     del rng
 
-    # Initialize critic
-    V_net = Critic(hidden_dim=N_HIDDEN_FEAFURES,
-                   n_layers=N_HIDDEN_LAYERS)
-    rng = jax.random.key(43)
-    V_state = create_train_state(V_net, rng, η=CRITIC_LEARNING_RATE)
-    del rng
+    for _ in range(TRAIN_STEPS):
+        V_π = td_lambda_value_estimate(env, π_state, γ, λ, ϕ)
 
-    for _ in range(N_TRAJECTORIES):
-        s = env.start
-        # Eligibility traces
-        z = {}
-        for _ in range(MAX_STEPS_PER_TRAJECTORY):
-            x = ϕ[s]
-            a_logits = π_state.apply_fn({'params': π_state.params},
-                                        np.array([x]))[0]
-            a_idx = np.random.multinomial(1, pvals=a_logits)
-            a_idx = np.argmax(a_idx)
-            a = env.A[a_idx]
-            r = env.R[s]
-            s_prime = env.step(s, a)
-            x_prime = ϕ[s_prime]
+        xs = [[], []]
+        a_idxs = [[], []]
+        dts = [[], []]
+        for _ in range(N_TRAJECTORIES_PER_STEP):
+            s = env.start
+            for _ in range(MAX_STEPS_PER_TRAJECTORY):
+                x = ϕ[s]
+                a_logits = π_state.apply_fn({'params': π_state.params},
+                                            np.array([x]))[0]
+                a_idx = np.random.multinomial(1, pvals=a_logits)
+                a_idx = np.argmax(a_idx)
+                a = env.A[a_idx]
+                r = env.R[s]
+                s_prime = env.step(s, a)
+                dt = temporal_difference(r, γ, V_π[s], V_π[s_prime])
 
-            v_out = V_state.apply_fn({'params': V_state.params},
-                                    np.array([x, x_prime]))
-            v = v_out[0]
-            v_prime = v_out[1]
-
-            dt = temporal_difference(r, γ, v, v_prime)
-
-            # Update critic using GAE, which uses TD(λ) updates
-            z[s] = z.get(s, 0.0) + 1.0
-            for sz in z.keys():
-                xz = ϕ[sz]
-                grads = compute_critic_gradients(V_state, z[sz], dt,
-                                                np.array([xz]))
-                V_state = V_state.apply_gradients(grads=grads)
-                z[sz] *= γ * λ
-
-            # Compute policy gradient for this step
-            # Ignore when the discounted reward is zero since
-            # it will cancel out the gradient anyway
-            grads, F = policy_gradient(π_state, dt, np.array([x]), np.array([a_idx]))
-            grads = natural_gradients(grads, F, δ, dt)
+                i = 0 if dt < 0 else 1
+                xs[i].append(x)
+                a_idxs[i].append(a_idx)
+                dts[i].append(dt)
+        
+        
+        for x, a_idx, dt in zip(xs, a_idxs, dts):
+            grads = policy_gradient(π_state, np.array(dt), np.array(x), np.array(a_idx))
+            grads = natural_gradients(grads, δ, np.array(dt))
             π_state = π_state.apply_gradients(grads=grads)
 
-    return π_state, V_state
+    return π_state
 
 
-class NetworkBase(nn.Module):
+class PolicyNet(nn.Module):
     hidden_dim: int
     n_layers: int
 
@@ -112,22 +99,8 @@ class NetworkBase(nn.Module):
         x = MLP(features=self.hidden_dim,
                 n_layers=self.n_layers)(x)
         x = nn.Dense(features=N_ACTIONS)(x)
-        return x
-
-
-class Actor(NetworkBase):
-    @nn.compact
-    def __call__(self, x):
-        x = super().__call__(x)
         x = nn.softmax(x)
         return x
-
-
-class Critic(NetworkBase):
-    @nn.compact
-    def __call__(self, x):
-        x = super().__call__(x)
-        return jnp.sum(x, axis=-1)
 
 
 def create_train_state(net, rng, η):
@@ -138,61 +111,121 @@ def create_train_state(net, rng, η):
         metrics=Metrics.empty())
 
 
+def td_lambda_value_estimate(env, π_state, γ, λ, ϕ):
+    # Initialize value function
+    V = {s: 0.0 for s in env.S}
+    π = epsilon_greedy_policy(π_state, env.A, ϕ, Ɛ=0.1)
+    N = {}
+    t = 0
+    while True:
+        t += 1
+        V_prime = update_value_function(env, V, N, π, γ, λ)
+        if (all(np.isclose(V[s], V_prime[s]) for s in env.S)
+            or t == N_VALUE_ESTIMATE_ITERATIONS):
+            break
+        V = V_prime
+    return V
+
+
+def epsilon_greedy_policy(π_state, A, ϕ, Ɛ):
+    def π(s):
+        if np.random.rand() <= Ɛ:
+            return random.choice(A)
+        x = ϕ[s]
+        a_logits = π_state.apply_fn({'params': π_state.params}, np.array([x]))[0]
+        return A[np.argmax(a_logits)]
+    return π
+
+
+def update_value_function(env, V, N, π, γ, λ):
+    """One episode of iterative temporal difference (TD) learning"""
+    V = V.copy()
+    s = env.start
+    # Eligibility traces
+    z = {}
+    for _ in range(MAX_STEPS_PER_TRAJECTORY):
+        a = π(s)
+        s_prime = env.step(s, a)
+        z[s] = z.get(s, 0.0) + 1.0
+        dt = temporal_difference(env.R[s], γ, V[s], V[s_prime])
+        for sz in z.keys():
+            # Temporal difference update step
+            N[sz] = N.get(sz, 0) + 1
+            η = td_lambda_learning_rate(N[sz])
+            V[sz] += η * z[sz] * dt
+            z[sz] *= λ * γ
+        if env.is_terminal_state(s):
+            break
+        s = s_prime
+    return V
+
+
 def temporal_difference(r, γ, v, v_prime):
     return r - v + γ * v_prime
 
 
-@jax.jit
-def compute_critic_gradients(V_state, z, dt, x):
-    def loss_fn(params):
-        v = V_state.apply_fn({'params': params}, x)
-        return -dt * z * jnp.sum(v)
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(V_state.params)
-    return grads
+def td_lambda_learning_rate(t):
+    """Decaying learning rate.
+
+    Using harmonic series since it meets Robbins-Monro conditions.
+    """
+    return 1.0 / t
 
 
 @jax.jit
-def policy_gradient(π_state, r, x, a_idx):
-    def loss_fn(params):
+def policy_gradient(π_state, dt, x, a_idx):
+    def loss_fn(params, r, x, a_idx):
         a_logits = π_state.apply_fn({'params': params}, x)
         a = jnp.take_along_axis(a_logits,
                                 jnp.expand_dims(a_idx, axis=-1),
-                                axis=1)
+                                axis=0)
         return jax.lax.cond(
-            r < 0.0,
-            lambda: jnp.sum(jnp.log(1.0 - a)),
-            lambda: jnp.sum(jnp.log(a)),
-        )
-    return jax.grad(loss_fn)(π_state.params), jax.hessian(loss_fn)(π_state.params)
+                r < 0.0,
+                lambda: jnp.sum(jnp.log(1.0 - a)),
+                lambda: jnp.sum(jnp.log(a)),
+            )
+    return jax.vmap(
+        lambda dt, x, a_idx: jax.grad(loss_fn)(π_state.params, dt, x, a_idx)
+    )(dt, x, a_idx)
 
 
-def natural_gradients(grads, F, δ, r):
-    g_flat, _ = jax.flatten_util.ravel_pytree(grads)
-    F_flat, _ = jax.flatten_util.ravel_pytree(F)
-    F_inv = np.linalg.pinv(F_flat.reshape(g_flat.shape[:1] * 2))
-
-    # Scale summed gradient
-    g_nat = F_inv @ g_flat
-
-    # Multiply by step size
-    # Negative sign bc NN opt does gradient descent
-    scale = g_flat @ g_nat
-    step_size = np.sqrt(2 * δ / (np.abs(scale) + 1e-12))
-    g_nat *= step_size
-
-    # Multiply my -|reward|, negative sign for NN optimizer
-    g_nat *= -abs(r)
+def natural_gradients(grads, δ, dt):
+    g_leaves, g_tree = jax.tree_util.tree_flatten(grads)
+    n = g_leaves[0].shape[0]
+    g_flat = [[] for _ in range(n)]
+    for leaf in g_leaves:
+        for i, grad in enumerate(leaf):
+            g_flat[i].extend(grad.flatten())
+    g_flat = np.array(g_flat)
+    g_nat = compute_natural_gradient(g_flat, δ, dt)
 
     # Re-ravel gradients into PyTree
-    g_leaves, g_tree = jax.tree_util.tree_flatten(grads)
     i = 0
     unflatten_input = []
     for shape in [x.shape for x in g_leaves]:
+        shape = shape[1:]
         di = np.prod(shape)
         unflatten_input.append(g_nat[i:i+di].reshape(shape))
         i += di
     return jax.tree_util.tree_unflatten(g_tree, unflatten_input)
+
+
+@jax.jit
+def compute_natural_gradient(g_flat, δ, dt):
+    F = jnp.mean(jnp.array([jnp.outer(g, g) for g in g_flat]), axis=0)
+    F_inv = jnp.linalg.pinv(F)
+
+    # Scale summed gradient
+    g_nat = jnp.einsum('ab,cb->ca', F_inv, g_flat)
+
+    # Scale step size
+    scale = jnp.mean(jnp.einsum('ab,ab->a', g_nat, g_flat))
+    step_size = jnp.sqrt(2 * δ / (jnp.abs(scale) + 1e-12))
+    g_nat *= step_size
+
+    # # Negative sign for NN optimizer
+    g_nat = -jnp.einsum('a,ab->ab', dt, g_nat)
+    return jnp.sum(g_nat, axis=0)
 
 
 def optimal_policy(π_state, S, A, ϕ):
@@ -226,11 +259,10 @@ if __name__ == '__main__':
     # Step size scale
     δ = 1e-2
 
-    π_state, V_state = natural_policy_gradient(env, γ, λ, δ, ϕ)
+    π_state = natural_policy_gradient(env, γ, λ, δ, ϕ)
     π_opt = optimal_policy(π_state, env.S, env.A, ϕ)
-    V_opt = optimal_value_function(V_state, env.S, ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)
-    print('Optimal value function:')
-    print_grid(V_opt)
+    # print('Optimal value function:')
+    # print_grid(V_opt)
