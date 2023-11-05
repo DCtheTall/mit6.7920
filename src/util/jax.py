@@ -8,6 +8,7 @@ from flax import struct
 import flax.linen as nn
 from flax.training import train_state
 import jax.numpy as jnp
+import optax
 from typing import Callable
 
 
@@ -36,3 +37,11 @@ class Metrics(metrics.Collection):
 
 class TrainState(train_state.TrainState):
     metrics: Metrics
+
+
+def create_sgd_train_state(net, rng, η, features):
+    params = net.init(rng, jnp.ones([1, features]))['params']
+    tx = optax.sgd(η)
+    return TrainState.create(
+        apply_fn=net.apply, params=params, tx=tx,
+        metrics=Metrics.empty())

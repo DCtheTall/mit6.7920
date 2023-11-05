@@ -28,6 +28,8 @@ Actions = List[Action]
 Transitions = Dict[Tuple[State, Action, State], float]
 Rewards = Dict[State, float]
 StartingStateDist = Dict[State, float]
+Feature = np.ndarray
+Features = Dict[State, Feature]
 
 
 class GridWorld:
@@ -42,6 +44,8 @@ class GridWorld:
     P: Transitions
     # Rewards
     R: Rewards
+    # Features for function approximation
+    ϕ: Features
     # Starting state distribution
     µ: StartingStateDist
 
@@ -68,6 +72,7 @@ class GridWorld:
         self.R = {s: 0.0 for s in self.S}
         self.R[self.goal] = goal_reward
         self.R[self.failure] = failure_reward
+        self.ϕ = _build_features(self)
         self.µ = {s: float(s == self.start) for s in self.S}
 
     def step(self, s: State, a: Action) -> State:
@@ -130,3 +135,24 @@ def _build_transition_probabilities(
             if len(p_weights) < 3:
                 P[(s, a, s)] = 1.0 - sum(p_weights)
     return P
+
+
+def _build_features(env):
+    """Extract features for linear TD"""
+    ϕ = {}
+    for s in env.S:
+        x, y = s
+        xg, yg = env.goal
+        xf, yf = env.failure
+        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
+        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
+        ϕ[s] = np.array([
+            float(x), float(y), # position
+            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
+            float(x + y), # L1 norm from origin
+            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
+            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
+            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
+        ], dtype=np.float64)
+    return ϕ

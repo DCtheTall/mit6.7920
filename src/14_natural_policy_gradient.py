@@ -29,10 +29,9 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 from util.display import print_grid
 from util.gridworld import GridWorld
-from util.jax import MLP, Metrics, TrainState
+from util.jax import MLP, create_sgd_train_state
 
 jax.config.update('jax_enable_x64', True)
 
@@ -48,44 +47,24 @@ MAX_STEPS_PER_TRAJECTORY = 100
 N_VALUE_ESTIMATE_ITERATIONS = 100
 
 
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float64)
-    return ϕ
-
-
-def natural_policy_gradient(env, γ, λ, δ, ϕ):
+def natural_policy_gradient(env, γ, λ, δ):
     # Initialize actor
     π_net = PolicyNet(hidden_dim=N_HIDDEN_FEATURES,
                       n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
-    π_state = create_train_state(π_net, rng, η=LEARNING_RATE)
+    π_state = create_sgd_train_state(π_net, rng, η=LEARNING_RATE,
+                                     features=N_FEATURES)
     del rng
 
     for _ in range(TRAIN_STEPS):
-        V_π = td_lambda_value_estimate(env, π_state, γ, λ, ϕ)
+        V_π = td_lambda_value_estimate(env, π_state, γ, λ)
         xs = [[], []]
         a_idxs = [[], []]
         dts = [[], []]
         for _ in range(N_TRAJECTORIES_PER_STEP):
             s = env.start
             for _ in range(MAX_STEPS_PER_TRAJECTORY):
-                x = ϕ[s]
+                x = env.ϕ[s]
                 a_logits = π_state.apply_fn({'params': π_state.params},
                                             np.array(x))
                 a_idx = np.random.multinomial(1, pvals=a_logits)
@@ -127,15 +106,7 @@ class PolicyNet(nn.Module):
         return x
 
 
-def create_train_state(net, rng, η):
-    params = net.init(rng, jnp.ones([1, N_FEATURES]))['params']
-    tx = optax.sgd(η)
-    return TrainState.create(
-        apply_fn=net.apply, params=params, tx=tx,
-        metrics=Metrics.empty())
-
-
-def td_lambda_value_estimate(env, π_state, γ, λ, ϕ):
+def td_lambda_value_estimate(env, π_state, γ, λ):
     # Initialize value function
     V = {s: 0.0 for s in env.S}
     N = {}
@@ -157,7 +128,7 @@ def update_value_function(env, V, N, π_state, γ, λ):
     # Eligibility traces
     z = {}
     for _ in range(MAX_STEPS_PER_TRAJECTORY):
-        x = ϕ[s]
+        x = env.ϕ[s]
         a_logits = π_state.apply_fn({'params': π_state.params},
                                     np.array(x))
         a_idx = np.random.multinomial(1, pvals=a_logits)
@@ -266,9 +237,6 @@ def optimal_value_function(V_state, S, ϕ):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-     # Non-linear features
-    ϕ = features(env)
-
     # Discount factor
     γ = 0.75
     λ = 0.6
@@ -276,8 +244,8 @@ if __name__ == '__main__':
     # Step size scale
     δ = 1e-2
 
-    π_state = natural_policy_gradient(env, γ, λ, δ, ϕ)
-    π_opt = optimal_policy(π_state, env.S, env.A, ϕ)
+    π_state = natural_policy_gradient(env, γ, λ, δ)
+    π_opt = optimal_policy(π_state, env.S, env.A, env.ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)

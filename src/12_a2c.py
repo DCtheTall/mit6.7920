@@ -38,36 +38,15 @@ jax.config.update('jax_enable_x64', True)
 N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
-N_HIDDEN_FEAFURES = 4 * N_FEATURES
+N_HIDDEN_FEATURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-2
 CRITIC_LEARNING_RATE = 1e-2
 N_TRAJECTORIES = 500
 
 
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float64)
-    return ϕ
-
-
-def a2c(env, γ, λ, ϕ, T=100):
+def a2c(env, γ, λ, T=100):
     # Initialize critic first
-    V_net = Critic(hidden_dim=N_HIDDEN_FEAFURES,
+    V_net = Critic(hidden_dim=N_HIDDEN_FEATURES,
                    n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
     V_state = create_train_state(V_net, rng, η=CRITIC_LEARNING_RATE)
@@ -75,7 +54,7 @@ def a2c(env, γ, λ, ϕ, T=100):
 
     # Initialize actor but its parameters will be copied
     # from the critic after the first step
-    π_net = Actor(hidden_dim=N_HIDDEN_FEAFURES,
+    π_net = Actor(hidden_dim=N_HIDDEN_FEATURES,
                   n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(0)
     π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
@@ -86,7 +65,7 @@ def a2c(env, γ, λ, ϕ, T=100):
         # Eligibility traces
         z = {}
         for _ in range(T):
-            x = ϕ[s]
+            x = env.ϕ[s]
             a_logits = π_state.apply_fn({'params': π_state.params},
                                         np.array([x]))[0]
             a_idx = np.random.multinomial(1, pvals=a_logits)
@@ -94,7 +73,7 @@ def a2c(env, γ, λ, ϕ, T=100):
             a = env.A[a_idx]
             r = env.R[s]
             s_prime = env.step(s, a)
-            x_prime = ϕ[s_prime]
+            x_prime = env.ϕ[s_prime]
 
             v_out = V_state.apply_fn({'params': V_state.params},
                                      np.array([x, x_prime]))
@@ -106,7 +85,7 @@ def a2c(env, γ, λ, ϕ, T=100):
             # Update critic using GAE, which uses TD(λ) updates
             z[s] = z.get(s, 0.0) + 1.0
             for sz in z.keys():
-                xz = ϕ[sz]
+                xz = env.ϕ[sz]
                 grads = compute_critic_gradients(V_state, z[sz], dt,
                                                  np.array([xz]))
                 V_state = V_state.apply_gradients(grads=grads)
@@ -218,17 +197,14 @@ def optimal_value_function(V_state, S, ϕ):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Non-linear features
-    ϕ = features(env)
-
     # Discount factor
     γ = 0.75
     λ = 0.6
 
-    π_state, V_state = a2c(env, γ, λ, ϕ)
+    π_state, V_state = a2c(env, γ, λ)
 
-    π_opt = optimal_policy(π_state, env.S, env.A, ϕ)
-    V_opt = optimal_value_function(V_state, env.S, ϕ)
+    π_opt = optimal_policy(π_state, env.S, env.A, env.ϕ)
+    V_opt = optimal_value_function(V_state, env.S, env.ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)

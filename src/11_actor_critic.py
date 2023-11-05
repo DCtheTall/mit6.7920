@@ -22,9 +22,8 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 from util.display import print_grid
-from util.jax import MLP, Metrics, TrainState
+from util.jax import MLP, create_sgd_train_state
 from util.gridworld import GridWorld
 
 jax.config.update('jax_enable_x64', True)
@@ -33,53 +32,34 @@ jax.config.update('jax_enable_x64', True)
 N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
-N_HIDDEN_FEAFURES = 4 * N_FEATURES
+N_HIDDEN_FEATURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-3
 CRITIC_LEARNING_RATE = 1e-2
 N_TRAJECTORIES = 1000
 
 
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float64)
-    return ϕ
-
-
-def actor_critic(env, γ, ϕ, T=100):
+def actor_critic(env, γ, T=100):
     # Initialize critic first
-    Q_net = Critic(hidden_dim=N_HIDDEN_FEAFURES,
+    Q_net = Critic(hidden_dim=N_HIDDEN_FEATURES,
                    n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(42)
-    Q_state = create_train_state(Q_net, rng, η=CRITIC_LEARNING_RATE)
+    Q_state = create_sgd_train_state(Q_net, rng, η=CRITIC_LEARNING_RATE,
+                                     features=N_FEATURES)
     del rng
 
     # Initialize actor but its parameters will be copied
     # from the critic after the first step
-    π_net = Actor(hidden_dim=N_HIDDEN_FEAFURES,
+    π_net = Actor(hidden_dim=N_HIDDEN_FEATURES,
                   n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(0)
-    π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
+    π_state = create_sgd_train_state(π_net, rng, η=ACTOR_LEARNING_RATE,
+                                     features=N_FEATURES)
     del rng
 
     for _ in range(N_TRAJECTORIES):
         s = env.start
         for _ in range(T):
-            x = ϕ[s]
+            x = env.ϕ[s]
             a_logits = π_state.apply_fn({'params': π_state.params},
                                         np.array([x]))[0]
             a_idx = np.random.multinomial(1, pvals=a_logits)
@@ -87,7 +67,7 @@ def actor_critic(env, γ, ϕ, T=100):
             a = env.A[a_idx]
             r = env.R[s]
             s_prime = env.step(s, a)
-            x_prime = ϕ[s_prime]
+            x_prime = env.ϕ[s_prime]
             a_prime_logits = π_state.apply_fn({'params': π_state.params},
                                               np.array([x_prime]))[0]
             a_prime_idx = np.random.multinomial(1, pvals=a_prime_logits)
@@ -140,14 +120,6 @@ class Actor(Critic):
         # Use softmax so output is probability of each action
         logits = nn.softmax(q_values)
         return logits
-
-
-def create_train_state(net, rng, η):
-    params = net.init(rng, jnp.ones([1, N_FEATURES]))['params']
-    tx = optax.sgd(η)
-    return TrainState.create(
-        apply_fn=net.apply, params=params, tx=tx,
-        metrics=Metrics.empty())
 
 
 def temporal_difference(r, γ, q, q_prime):
@@ -207,15 +179,12 @@ def optimal_value_function(Q_state, S, ϕ):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Non-linear features
-    ϕ = features(env)
-
     # Discount factor
     γ = 0.75
 
-    π_state, Q_state = actor_critic(env, γ, ϕ)
-    π_opt = optimal_policy(π_state, env.S, env.A, ϕ)
-    V_opt = optimal_value_function(Q_state, env.S, ϕ)
+    π_state, Q_state = actor_critic(env, γ)
+    π_opt = optimal_policy(π_state, env.S, env.A, env.ϕ)
+    V_opt = optimal_value_function(Q_state, env.S, env.ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)

@@ -76,6 +76,8 @@ from util.display import print_grid
 from util.jax import MLP, Metrics as MetricsBase
 from util.gridworld import GridWorld
 
+jax.config.update('jax_enable_x64', True)
+
 
 N_FEATURES = 8
 LEARNING_RATE = 1e-3
@@ -108,7 +110,7 @@ def features(env):
             float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
             0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
             0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float32)
+        ], dtype=np.float64)
     return ϕ
 
 

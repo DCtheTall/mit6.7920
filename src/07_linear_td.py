@@ -25,38 +25,17 @@ from util.gridworld import GridWorld
 N_FEATURES = 8
 
 
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float32)
-    return ϕ
-
-
 def initialize_parameters():
     return np.zeros((N_FEATURES,))
 
 
-def ilstd(env, V, γ, λ, θ, ϕ):
+def ilstd(env, V, γ, λ, θ):
     N = {s: 0.0 for s in env.S}
     π = random_policy(env.S, env.A)
     n_iter = 0
     while True:
         n_iter += 1
-        θ_prime = update_value_function(env, V, N, π, γ, λ, θ, ϕ)
+        θ_prime = update_value_function(env, V, N, π, γ, λ, θ)
         if all(np.isclose(a, b) for a, b in zip(θ, θ_prime)):
             break
         θ = θ_prime
@@ -71,7 +50,7 @@ def random_policy(S, A):
     return π
 
 
-def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
+def update_value_function(env, V, N, π, γ, λ, θ, T=100):
     θ = θ.copy()
     s = (0, 0)
     z = {}
@@ -90,7 +69,7 @@ def update_value_function(env, V, N, π, γ, λ, θ, ϕ, T=100):
         for sz in z.keys():
             N[sz] = N.get(sz, 0) + 1
             η = learning_rate(N[sz])
-            θ += η * z[sz] * dt * ϕ[sz]
+            θ += η * z[sz] * dt * env.ϕ[sz]
             z[sz] *= λ * γ
 
         # Stop if reached terminal node
@@ -115,22 +94,19 @@ def temporal_difference(V, R, γ, θ, s, s_prime):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Non-linear features
-    ϕ = features(env)
-
     # Initialize parameters for linear TD
     θ = initialize_parameters()
 
     # Initialize parameterized value function
     def V(θ, s):
-        return θ @ ϕ[s]
+        return θ @ env.ϕ[s]
 
     # Discount factor
     γ = 0.75
     λ = 0.6
 
     # Approximate value function with linear TD
-    θ_opt, n_iter = ilstd(env, V, γ, λ, θ, ϕ)
+    θ_opt, n_iter = ilstd(env, V, γ, λ, θ)
     V_opt = {s: V(θ_opt, s) for s in env.S}
 
     # Display results

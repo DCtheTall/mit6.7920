@@ -34,28 +34,7 @@ N_TRAJECTORIES_PER_UPDATE = 100
 TRAIN_STEPS = 75
 
 
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float64)
-    return ϕ
-
-
-def reinforce(env, γ, ϕ, T=100):
+def reinforce(env, γ, T=100):
     π_net = PolicyNet(hidden_dim=2*N_FEATURES,
                       n_layers=4)
     rng = jax.random.key(42)
@@ -70,7 +49,7 @@ def reinforce(env, γ, ϕ, T=100):
             cur_grad_inputs = []
             s = env.start
             for _ in range(T):
-                x = ϕ[s]
+                x = env.ϕ[s]
                 a_logits = state.apply_fn({'params': state.params},
                                           np.array([x]))[0]
                 a_idx = np.random.multinomial(1, pvals=a_logits)
@@ -179,14 +158,11 @@ def optimal_policy(state, S, A, ϕ):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Non-linear features
-    ϕ = features(env)
-
     # Discount factor
     γ = 0.75
 
-    opt_state = reinforce(env, γ, ϕ)
-    π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
+    opt_state = reinforce(env, γ)
+    π_opt = optimal_policy(opt_state, env.S, env.A, env.ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)
