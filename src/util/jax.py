@@ -25,7 +25,8 @@ class MLP(nn.Module):
     @nn.compact
     def __call__(self, x: Array) -> Array:
         for _ in range(self.n_layers):
-            x = nn.Dense(self.features, self.use_bias)(x)
+            x = nn.Dense(self.features, self.use_bias,
+                         dtype=jnp.float64)(x)
             x = self.activation(x)
         return x
 
