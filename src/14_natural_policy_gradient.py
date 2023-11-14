@@ -94,7 +94,7 @@ def natural_policy_gradient(env, γ, λ, δ):
                 continue
             grads = policy_gradient(π_state, np.array(dt), np.array(x),
                                     np.array(a_idx))
-            grads = natural_gradients(grads, δ, np.array(dt))
+            grads = natural_gradients(grads, δ)
             π_state = π_state.apply_gradients(grads=grads)
     return π_state
 
@@ -182,7 +182,7 @@ def policy_gradient(π_state, dts, xs, a_idxs):
     )(dts, xs, a_idxs)
 
 
-def natural_gradients(grads, δ, dt):
+def natural_gradients(grads, δ):
     # Unravel gradient trees into flat vectors
     g_leaves, g_tree = jax.tree_util.tree_flatten(grads)
     n = g_leaves[0].shape[0]
