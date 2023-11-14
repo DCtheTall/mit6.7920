@@ -1,7 +1,32 @@
 """
 Implementation of Trust Region Policy Optimization (TRPO)
 =========================================================
-Note: One difference TRPO paper authors mention is they use actual KL-divergence Hessian for NPG
+TRPO improves on natural policy gradient (NPG) by using the
+Hessian vector product to approximate the Fisher information
+matrix (the latter being the negative of Hessian of the log-loss).
+
+It also uses the conjugate gradients to solve the equation
+
+F @ x = g
+
+to approximate the natural gradient instead of expensively computing
+the inverse of the Fisher matrix.
+
+TRPO also only accepts updates that improve the expected return
+of the policy and where the new policy's KL-divergence from the old
+policy is within a certain threshold.
+
+This algorithm trains for the same number of steps as NPG but
+has a significantly faster wall clock time due to the speed
+improvements.
+
+Result:
+-------
+Optimal policy:
+Action.Up	 Action.Up	 Action.Right	 Action.Right
+Action.Up	 Action.Up	 Action.Left	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Left
 
 """
 
@@ -17,14 +42,14 @@ jax.config.update('jax_enable_x64', True)
 
 
 N_FEATURES = 8
-N_HIDDEN_FEATURES = 2 * N_FEATURES
+N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_HIDDEN_LAYERS = 2
 N_ACTIONS = 4
-TRAIN_STEPS = 5
+TRAIN_STEPS = 100
 N_TRAJECTORIES_PER_STEP = 10
-N_VALUE_ESTIMATE_ITERATIONS = 10
+N_VALUE_ESTIMATE_ITERATIONS = 100
 MAX_STEPS_PER_TRAJECTORY = 100
-MAX_CONJUGATE_GRADIENT_STEPS = 25
+MAX_CONJUGATE_GRADIENT_STEPS = 10
 LINE_SEARCH_STEPS = 10
 
 
@@ -37,8 +62,13 @@ def trpo(env, γ, λ, δ):
     π_state = create_sgd_train_state(π_net, rng, η=1.0, features=N_FEATURES)
     del rng
 
-    for _ in range(TRAIN_STEPS):
-        V_π = td_lambda_value_estimate(env, π_state, γ, λ)
+    # Initialize value function
+    V_π = {s: 0.0 for s in env.S}
+
+    for step in range(TRAIN_STEPS):
+        V_π = td_lambda_value_estimate(env, π_state, V_π, γ, λ)
+        print('Value estimate at step', step)
+        print_grid(V_π)
         xs = [[], []]
         a_idxs = [[], []]
         dts = [[], []]
@@ -66,12 +96,12 @@ def trpo(env, γ, λ, δ):
         for x, a_idx, dt in zip(xs, a_idxs, dts):
             if not x:
                 continue
-            grads = policy_gradient(π_state, np.array(dt), np.array(x),
-                                    np.array(a_idx))
-            Fvp = fisher_vector_product(π_state, np.array(dt),
-                                        np.array(x), np.array(a_idx))
+            x, a_idx, dt = np.array(x), np.array(a_idx), np.array(dt)
+            grads = policy_gradient(π_state, dt, x, a_idx)
+            Fvp = fisher_vector_product(π_state, dt, x, a_idx)
             g_nat = conjugate_gradient(grads, Fvp)
-            π_state = line_search_update(π_state, x, g_nat, δ)
+            g_nat = scale_step_size(g_nat, Fvp)
+            π_state = line_search_update(π_state, g_nat, x, a_idx, dt, δ)
     return π_state
 
 
@@ -88,9 +118,7 @@ class PolicyNet(nn.Module):
         return x
 
 
-def td_lambda_value_estimate(env, π_state, γ, λ):
-    # Initialize value function
-    V = {s: 0.0 for s in env.S}
+def td_lambda_value_estimate(env, π_state, V, γ, λ):
     N = {}
     t = 0
     while True:
@@ -148,7 +176,7 @@ def create_loss_fn(π_state, r, x, a_idx):
         a_logits = π_state.apply_fn({'params': params}, x)
         a = jnp.take_along_axis(a_logits,
                                 jnp.expand_dims(a_idx, axis=-1),
-                                axis=0)
+                                axis=1)
         return jnp.sum(
             jax.vmap(
                 lambda r_i, a_i: jax.lax.cond(
@@ -171,11 +199,14 @@ def fisher_vector_product(π_state, r, x, a_idx):
     @jax.jit
     def fvp(v):
         loss_fn = create_loss_fn(π_state, r, x, a_idx)
-        return jax.jvp(
+        # Compute Hessian
+        H = jax.jvp(
             jax.grad(loss_fn),
             [tree_to_float64(π_state.params)],
             [tree_to_float64(v)],
         )[1]
+        # Fisher matrix is negative Hessian
+        return jax.tree_map(lambda x: -x, H)
     return fvp
 
 
@@ -185,11 +216,11 @@ def tree_to_float64(pytree):
 
 def conjugate_gradient(grads, Fvp, Ɛ=1e-2):
     """
-    Use conjugate gradients to solve:
+    Use conjugate gradients to solve for x in:
 
     F @ x = g
-    
-    For an initial guess we set x=g and compute
+
+    For an initial guess, set x=g and compute
     r = g - F @ g
 
     """
@@ -201,12 +232,13 @@ def conjugate_gradient(grads, Fvp, Ɛ=1e-2):
     n_iter = 0
     r_sq = np.dot(r, r)
     for _ in range(MAX_CONJUGATE_GRADIENT_STEPS):
-        if r_sq ** 0.5 < Ɛ:
+        error = r_sq ** 0.5
+        if error < Ɛ:
             break
         n_iter += 1
         p_raveled = ravel(g_leaves, g_tree, p)
         p_prime = unravel(Fvp(p_raveled))[2]
-        α = np.dot(r, r) / np.dot(p, p_prime)
+        α = r_sq / np.dot(p, p_prime)
         x += α * p
         r -= α * p_prime
         r_sq_prime = np.dot(r, r)
@@ -236,15 +268,42 @@ def ravel(g_leaves, g_tree, g_flat):
     return jax.tree_util.tree_unflatten(g_tree, unflatten_input)
 
 
-def line_search_update(π_state, x, g_nat, δ):
+def scale_step_size(g_nat, Fvp):
+    _, _, x = unravel(g_nat)
+    _, _, Hx = unravel(Fvp(g_nat))
+    scale = np.sqrt(2.0 / (np.abs(np.dot(x, Hx)) + 1e-12))
+    return jax.tree_map(lambda x: x * scale, g_nat)
+
+
+def line_search_update(π_state, g_nat, x, a_idx, dt, δ):
     for j in range(LINE_SEARCH_STEPS):
         α = 10.0 ** -j
-        g_nat_step = jax.tree_map(lambda x: α * x, g_nat)
-        π_prime_state = π_state.apply_gradients(grads=g_nat_step)
+        # Negative sign for NN opt which does gradient descent
+        g_nat_step = jax.tree_map(lambda x: -α * x, g_nat)
+        π_prime_state = π_state.replace().apply_gradients(grads=g_nat_step)
+        L = importance_weighted_policy_advantage(π_state, π_prime_state, x,
+                                                 a_idx, dt)
+        if L < 0:
+            continue
         d_kl = kl_divergence(π_state, π_prime_state, np.array(x))
         if d_kl < δ:
+            print('accepted update', j)
             return π_prime_state
+    print('no update accepted')
     return π_state
+
+
+@jax.jit
+def importance_weighted_policy_advantage(π_state, π_prime_state, x, a_idx, dt):
+    π_logits = π_state.apply_fn({'params': π_state.params}, x)
+    π_prime_logits = π_prime_state.apply_fn({'params': π_prime_state.params}, x)
+    π_a = jnp.take_along_axis(π_logits,
+                              jnp.expand_dims(a_idx, axis=-1),
+                              axis=1)
+    π_prime_a = jnp.take_along_axis(π_prime_logits,
+                                    jnp.expand_dims(a_idx, axis=-1),
+                                    axis=1)
+    return jnp.sum((π_prime_a / π_a - 1.0) * dt)
 
 
 @jax.jit
@@ -271,7 +330,7 @@ if __name__ == '__main__':
     λ = 0.6
 
     # Trust region size
-    δ = 1e-2
+    δ = 1.0
 
     π_state = trpo(env, γ, λ, δ)
     π_opt = optimal_policy(π_state, env.S, env.A, env.ϕ)

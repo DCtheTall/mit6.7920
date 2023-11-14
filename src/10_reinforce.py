@@ -8,8 +8,8 @@ Result:
 -------
 Optimal policy:
 Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Up	 Action.Up	 Action.Left	 Action.Left
-Action.Up	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Left	 Action.Left	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Down
 Action.Left	 Action.Left	 Action.Left	 Action.Down
 
 """

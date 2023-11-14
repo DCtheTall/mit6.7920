@@ -20,10 +20,10 @@ trajectories, less than 20% of what REINFORCE required.
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Right	 Action.Right
-Action.Left	 Action.Left	 Action.Left	 Action.Right
-Action.Left	 Action.Left	 Action.Left	 Action.Down
-Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Down
+Action.Up	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Left
 
 """
 
@@ -58,8 +58,13 @@ def natural_policy_gradient(env, γ, λ, δ):
                                      features=N_FEATURES)
     del rng
 
-    for _ in range(TRAIN_STEPS):
-        V_π = td_lambda_value_estimate(env, π_state, γ, λ)
+    # Initialize value function
+    V_π = {s: 0.0 for s in env.S}
+
+    for step in range(TRAIN_STEPS):
+        V_π = td_lambda_value_estimate(env, π_state, V_π, γ, λ)
+        print('Value estimate at step,', step)
+        print_grid(V_π)
         xs = [[], []]
         a_idxs = [[], []]
         dts = [[], []]
@@ -107,9 +112,7 @@ class PolicyNet(nn.Module):
         return x
 
 
-def td_lambda_value_estimate(env, π_state, γ, λ):
-    # Initialize value function
-    V = {s: 0.0 for s in env.S}
+def td_lambda_value_estimate(env, π_state, V, γ, λ):
     N = {}
     t = 0
     while True:
@@ -188,7 +191,7 @@ def natural_gradients(grads, δ, dt):
         for i, grad in enumerate(leaf):
             g_flat[i].extend(grad.flatten())
     g_flat = np.array(g_flat)
-    g_nat = compute_natural_gradient(g_flat, δ, dt)
+    g_nat = compute_natural_gradient(g_flat, δ)
 
     # Re-ravel gradients into PyTree
     i = 0
@@ -202,7 +205,7 @@ def natural_gradients(grads, δ, dt):
 
 
 @jax.jit
-def compute_natural_gradient(g_flat, δ, dt):
+def compute_natural_gradient(g_flat, δ):
     F = jnp.mean(jnp.array([jnp.outer(g, g) for g in g_flat]), axis=0)
     F_inv = jnp.linalg.pinv(F)
 

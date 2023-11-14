@@ -72,7 +72,7 @@ class GridWorld:
         self.R = {s: 0.0 for s in self.S}
         self.R[self.goal] = goal_reward
         self.R[self.failure] = failure_reward
-        self.ϕ = _build_features(self)
+        self.ϕ = _build_features(self, size)
         self.µ = {s: float(s == self.start) for s in self.S}
 
     def step(self, s: State, a: Action) -> State:
@@ -89,7 +89,7 @@ class GridWorld:
                                size=1,
                                p=p_weights)[0]
         return possible_states[idx]
-    
+
     def is_terminal_state(self, s: State) -> bool:
         return s in {self.goal, self.failure}
 
@@ -137,8 +137,11 @@ def _build_transition_probabilities(
     return P
 
 
-def _build_features(env):
-    """Extract features for linear TD"""
+def _build_features(env: GridWorld, size: int):
+    """Hand designed features for parametric models.
+
+    All features are normalized to the range [0, 1]
+    """
     ϕ = {}
     for s in env.S:
         x, y = s
@@ -147,12 +150,12 @@ def _build_features(env):
         l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
         l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
         ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
+            float(x) / size, float(y) / size, # position
+            (x ** 2.0 + y ** 2.0) ** 0.5 / (np.sqrt(2.0) * size), # L2 distance from origin
+            float(x + y) / (2.0 * size), # L1 norm from origin
+            float(abs(x - xg) + abs(y - yg)) / (2.0 * size), # L1 distance from goal
+            float(abs(x - xf) + abs(y - yf)) / (2.0 * size), # L1 distance from failure
+            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal) / np.pi, # angle wrt goal
+            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail) / np.pi, # angle wrt failure
         ], dtype=np.float64)
     return ϕ

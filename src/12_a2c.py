@@ -11,15 +11,15 @@ and more data efficient than A3C.
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Down
-Action.Up	 Action.Left	 Action.Left	 Action.Down
-Action.Left	 Action.Left	 Action.Down	 Action.Down
+Action.Up	 Action.Up	 Action.Down	 Action.Down
 Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Left
 Optimal value function:
-0.048049465	 0.028313711	 0.7294688	 3.4895468
--0.026506033	 -0.06699917	 -0.20350263	 -3.7429316
--0.07243951	 -0.07243951	 -0.11969583	 -0.3646946
--0.07243951	 -0.07243951	 -0.07243951	 -0.17680573
+-0.24725349974234986	 -0.08145740584122518	 0.42139891590555445	 2.554816192694035
+-0.3817363674729299	 -0.40616133199433485	 -0.7857642737751733	 -4.174560193698902
+-0.38620141797720287	 -0.40257019105638125	 -0.5752793719865422	 -1.1547905627224417
+-0.3651403501054477	 -0.40294576413652916	 -0.5105077772981813	 -0.8728789968697053
 
 """
 
@@ -41,14 +41,14 @@ N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEATURES = 4 * N_FEATURES
 ACTOR_LEARNING_RATE = 1e-2
 CRITIC_LEARNING_RATE = 1e-2
-N_TRAJECTORIES = 500
+N_TRAJECTORIES = 750
 
 
 def a2c(env, γ, λ, T=100):
     # Initialize critic first
     V_net = Critic(hidden_dim=N_HIDDEN_FEATURES,
                    n_layers=N_HIDDEN_LAYERS)
-    rng = jax.random.key(42)
+    rng = jax.random.key(13)
     V_state = create_train_state(V_net, rng, η=CRITIC_LEARNING_RATE)
     del rng
 
@@ -166,9 +166,7 @@ def compute_actor_gradients(π_state, dt, x, a_idx):
             lambda: jnp.sum(jnp.log(1.0 - a)),
             lambda: -jnp.sum(jnp.log(a)),
         )
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(π_state.params)
-    return grads
+    return jax.grad(loss_fn)(π_state.params)
 
 
 def copy_network_params(from_net, to_net):
