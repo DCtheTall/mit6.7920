@@ -92,6 +92,9 @@ class GridWorld:
 
     def is_terminal_state(self, s: State) -> bool:
         return s in {self.goal, self.failure}
+    
+    def random_action(self) -> Action:
+        return self.A[np.random.randint(0, len(self.A))]
 
 
 def _build_transition_probabilities(
