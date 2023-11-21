@@ -7,10 +7,15 @@ The backprop stage uses TD(0) updates.
 Result:
 -------
 Optimal value function:
-0.2844944920415114	 0.6007109956912923	 1.2423077098355912	 1.75	
-0.1539648532139492	 0.21868180064963455	 0.11386325660798145	 -1.9108428955078125	
-0.038864991271832586	 0.05095245831363437	 -0.15978539749580978	 -0.585549731683253	
-0.008259092778398579	 -0.01081149798324792	 -0.1331536793890871	 -0.22872147109426275
+0.02245143036306701	 0.04637681806199216	 0.911367752810623	 1.53125
+0.011865366305115796	 0.10652907384464531	 0.3479200081373322	 -1.9869791666666665
+0.006133351768491495	 0.028175828895737835	 0.09987025008349251	 -0.4573523346851437
+0.003483766632065051	 -0.02373441407737876	 -0.010394279081501747	 -0.3401467869707275
+Optimal policy:
+Action.Down	 Action.Left	 Action.Up	 Action.Up
+Action.Left	 Action.Up	 Action.Left	 Action.Up
+Action.Left	 Action.Up	 Action.Left	 Action.Left
+Action.Left	 Action.Up	 Action.Left	 Action.Down
 
 """
 
@@ -35,7 +40,7 @@ def monte_carlo_search_tree_policy(env, γ):
         print('backprop')
         tree.backprop_step(states + new_states, rewards + new_rewards, γ)
         print_grid(tree.value_function())
-    return tree.value_function()
+    return tree.value_function(), tree.policy(env.A)
 
 
 
@@ -48,7 +53,7 @@ class Node:
 
     def is_leaf(self):
         return all(len(self.children[a]) == 0 for a in self.children)
-    
+
     def add_child(self, a, s_prime, A):
         child = Node(s_prime, A)
         self.children[a].append(child)
@@ -63,7 +68,7 @@ class SearchTree:
 
     def contains_leaf(self):
         return any(node.is_leaf() for node in self.nodes.values())
-    
+
     def selection_step(self, env):
         cur = self.root
         states = []
@@ -88,7 +93,7 @@ class SearchTree:
             else:
                 cur = self.nodes[s_prime]
         return cur, states, rewards
-    
+
     def expand_and_simulate_step(self, node, env):
         if not node.is_leaf():
             return [], []
@@ -112,7 +117,7 @@ class SearchTree:
                     s = s_prime
                     a = env.random_action()
         return states, rewards
-    
+
     def backprop_step(self, states, rewards, γ):
         rewards = get_discounted_rewards(rewards, γ)
         for (s, s_prime), r in zip(states, rewards):
@@ -120,7 +125,7 @@ class SearchTree:
                 if s_prime in self.nodes:
                     dt = r - self.nodes[s].v + γ * self.nodes[s_prime].v
                 else:
-                    dt = r - self.nodes[s].v # + γ * r
+                    dt = r - self.nodes[s].v
                 self.nodes[s].v += self._learning_rate(s) * dt
 
     def _learning_rate(self, s):
@@ -130,6 +135,12 @@ class SearchTree:
 
     def value_function(self):
         return {s: node.v for s, node in self.nodes.items()}
+
+    def policy(self, A):
+        return {
+            s: max(A, key=lambda a: sum(child.v for child in node.children[a]))
+            for s, node in self.nodes.items()
+        }
 
 
 def get_discounted_rewards(rewards, γ):
@@ -148,6 +159,8 @@ if __name__ == '__main__':
     # Discount
     γ = 0.75
 
-    V_opt = monte_carlo_search_tree_policy(env, γ)
+    V_opt, π_opt = monte_carlo_search_tree_policy(env, γ)
     print('Optimal value function:')
     print_grid(V_opt)
+    print('Optimal policy:')
+    print_grid(π_opt)

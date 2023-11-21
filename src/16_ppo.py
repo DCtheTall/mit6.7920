@@ -2,6 +2,14 @@
 Implementation of Proximal Policy Optimization (PPO)
 ====================================================
 
+Result:
+-------
+Optimal policy:
+Action.Right	 Action.Right	 Action.Right	 Action.Right
+Action.Left	 Action.Left	 Action.Left	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Left
+
 """
 
 import flax.linen as nn
@@ -20,8 +28,8 @@ N_FEATURES = 8
 N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_HIDDEN_LAYERS = 2
 N_ACTIONS = 4
-LEARNING_RATE = 1e-2
-TRAIN_STEPS = 10
+LEARNING_RATE = 1e-3
+TRAIN_STEPS = 100
 N_TRAJECTORIES_PER_STEP = 10
 N_VALUE_ESTIMATE_ITERATIONS = 100
 MAX_STEPS_PER_TRAJECTORY = 100
