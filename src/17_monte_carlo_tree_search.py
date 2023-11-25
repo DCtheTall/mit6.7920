@@ -4,18 +4,20 @@ Implementation of Monte Carlo Tree Search (MCTS)
 Implementation of MCTS on grid world for value estimation.
 The backprop stage uses TD(0) updates.
 
+TODO use UCB for selecting best action
+
 Result:
 -------
 Optimal value function:
-0.02245143036306701	 0.04637681806199216	 0.911367752810623	 1.53125
-0.011865366305115796	 0.10652907384464531	 0.3479200081373322	 -1.9869791666666665
-0.006133351768491495	 0.028175828895737835	 0.09987025008349251	 -0.4573523346851437
-0.003483766632065051	 -0.02373441407737876	 -0.010394279081501747	 -0.3401467869707275
+0.36045719076355526	 0.5913425466910384	 1.10515693603711	 1.5286458333333333	
+0.121594148115878	 0.18849556499222592	 0.1189992431962465	 -2.0009033203125	
+0.023303158664331435	 0.023373021088128092	 -0.04965271832127247	 -0.1683729696245448	
+-0.009586591546362315	 -0.01653161157199871	 -0.05175394892877014	 -0.14482196197975225	
 Optimal policy:
-Action.Down	 Action.Left	 Action.Up	 Action.Up
-Action.Left	 Action.Up	 Action.Left	 Action.Up
-Action.Left	 Action.Up	 Action.Left	 Action.Left
-Action.Left	 Action.Up	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Up	
+Action.Right	 Action.Left	 Action.Left	 Action.Up	
+Action.Up	 Action.Left	 Action.Left	 Action.Down	
+Action.Left	 Action.Left	 Action.Left	 Action.Up
 
 """
 
@@ -63,11 +65,11 @@ class Node:
 class SearchTree:
     def __init__(self, env):
         self.root = Node(env.start, env.A)
-        self.nodes = {env.start: self.root}
-        self.update_counts = {env.start: 0}
+        self.explored_nodes = {env.start: self.root}
+        self.update_counts = {}
 
     def contains_leaf(self):
-        return any(node.is_leaf() for node in self.nodes.values())
+        return any(node.is_leaf() for node in self.explored_nodes.values())
 
     def selection_step(self, env):
         cur = self.root
@@ -84,14 +86,14 @@ class SearchTree:
             s_prime = env.step(cur.s, a)
             states.append([cur.s, s_prime])
             if s_prime not in cur.children[a]:
-                if s_prime in self.nodes:
-                    child = self.nodes[s_prime]
+                if s_prime in self.explored_nodes:
+                    child = self.explored_nodes[s_prime]
                     cur.children[a].append(child)
                 else:
-                    self.nodes[s_prime] = cur.add_child(a, s_prime, env.A)
-                cur = self.nodes[s_prime]
+                    self.explored_nodes[s_prime] = cur.add_child(a, s_prime, env.A)
+                cur = self.explored_nodes[s_prime]
             else:
-                cur = self.nodes[s_prime]
+                cur = self.explored_nodes[s_prime]
         return cur, states, rewards
 
     def expand_and_simulate_step(self, node, env):
@@ -100,12 +102,12 @@ class SearchTree:
         for a in env.A:
             for _ in range(N_TRAJECTORIES_PER_ACTION):
                 s = env.step(node.s, a)
-                if s in self.nodes:
-                    child = self.nodes[s]
+                if s in self.explored_nodes:
+                    child = self.explored_nodes[s]
                     if child not in node.children[a]:
                         node.children[a].append(child)
                 else:
-                    self.nodes[s] = node.add_child(a, s, env.A)
+                    self.explored_nodes[s] = node.add_child(a, s, env.A)
                 states = []
                 rewards = [env.R[s]]
                 for _ in range(MAX_STEPS_PER_TRAJECTORY):
@@ -121,12 +123,12 @@ class SearchTree:
     def backprop_step(self, states, rewards, γ):
         rewards = get_discounted_rewards(rewards, γ)
         for (s, s_prime), r in zip(states, rewards):
-            if s in self.nodes:
-                if s_prime in self.nodes:
-                    dt = r - self.nodes[s].v + γ * self.nodes[s_prime].v
+            if s in self.explored_nodes:
+                if s_prime in self.explored_nodes:
+                    dt = r - self.explored_nodes[s].v + γ * self.explored_nodes[s_prime].v
                 else:
-                    dt = r - self.nodes[s].v
-                self.nodes[s].v += self._learning_rate(s) * dt
+                    dt = r
+                self.explored_nodes[s].v += self._learning_rate(s) * dt
 
     def _learning_rate(self, s):
         t = self.update_counts.get(s, 0) + 1
@@ -134,12 +136,12 @@ class SearchTree:
         return 1.0 / t
 
     def value_function(self):
-        return {s: node.v for s, node in self.nodes.items()}
+        return {s: node.v for s, node in self.explored_nodes.items()}
 
     def policy(self, A):
         return {
             s: max(A, key=lambda a: sum(child.v for child in node.children[a]))
-            for s, node in self.nodes.items()
+            for s, node in self.explored_nodes.items()
         }
 
 
