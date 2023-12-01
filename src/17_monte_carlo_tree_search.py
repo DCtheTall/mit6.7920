@@ -171,7 +171,7 @@ class SearchTree:
                 s = node.s
                 for child in node.children.values():
                     a = child.a
-                    counts[(s, a)] = counts.get((s, a), 0) + child.update_count
+                    counts[(s, a)] = counts.get((s, a), 0) + 1
                     Q[(s, a)] = Q.get((s, a), 0.0) + child.q
                     new_frontier.extend(child.children.values())
             frontier = new_frontier
