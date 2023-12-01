@@ -1,158 +1,199 @@
 """
 Implementation of Monte Carlo Tree Search (MCTS)
 ================================================
-Implementation of MCTS on grid world for value estimation.
-The backprop stage uses TD(0) updates.
+Implementation of MCTS on grid world for policy and value estimation.
+The backprop stage uses TD(0) updates for Q-learning 
 
-TODO use UCB for selecting best action
+While exporing the tree, the agent maximizes the Upper Confidence Bound (UCB)
+instead of the Q-value.
+
+The value function is computed using
+
+V[s] = sum(π(a | s) * Q(s, a))
+
+where π is a softmax policy using each state-action's Q-value.
+The final policy displayed chooses the action which maximizes the Q-value.
 
 Result:
 -------
 Optimal value function:
-0.36045719076355526	 0.5913425466910384	 1.10515693603711	 1.5286458333333333	
-0.121594148115878	 0.18849556499222592	 0.1189992431962465	 -2.0009033203125	
-0.023303158664331435	 0.023373021088128092	 -0.04965271832127247	 -0.1683729696245448	
--0.009586591546362315	 -0.01653161157199871	 -0.05175394892877014	 -0.14482196197975225	
+-0.24077687850258375	 -0.14034779423444746	 0.1514940523767259	 1.0	
+-0.33627651059001773	 -0.377834609647569	 -0.4553592249033603	 -1.0261217798420608	
+-0.4075491662732952	 -0.4412034193514986	 -0.5197284714277862	 -0.7254809403322965	
+-0.4463146051463486	 -0.4710011750087477	 -0.538189941846108	 -0.644088344779331	
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up	
-Action.Right	 Action.Left	 Action.Left	 Action.Up	
+Action.Right	 Action.Up	 Action.Up	 Action.Up	
+Action.Right	 Action.Up	 Action.Left	 Action.Down	
 Action.Up	 Action.Left	 Action.Left	 Action.Down	
 Action.Left	 Action.Left	 Action.Left	 Action.Up
 
 """
 
+import numpy as np
 from util.display import print_grid
 from util.gridworld import GridWorld
 
 
-N_TRAJECTORIES = 200
+N_STEPS = 50000
 MAX_STEPS_PER_TRAJECTORY = 100
-N_TRAJECTORIES_PER_ACTION = 100
+N_SIMULATIONS_PER_ACTION = 1
 N_ACTIONS = 4
 
 
 def monte_carlo_search_tree_policy(env, γ):
     tree = SearchTree(env)
-    for step in range(N_TRAJECTORIES):
+    for step in range(N_STEPS):
         print('step', step)
         print('select')
-        node, states, rewards = tree.selection_step(env)
+        leaf_node = tree.selection_step(env)
         print('expand')
-        new_states, new_rewards = tree.expand_and_simulate_step(node, env)
+        tree.expand_and_simulate_step(env, leaf_node)
         print('backprop')
-        tree.backprop_step(states + new_states, rewards + new_rewards, γ)
-        print_grid(tree.value_function())
-    return tree.value_function(), tree.policy(env.A)
+        tree.backprop_step(leaf_node, γ)
+        print_grid(tree.softmax_policy_value_function(env))
+    return tree.softmax_policy_value_function(env), tree.argmax_policy(env)
 
 
 
 class Node:
-    def __init__(self, s, A):
-        self.s = s
-        self.v = 0.0
+    def __init__(self):
+        self.children = {}
         self.parent = None
-        self.children = {a: [] for a in A}
+
+    def add_child(self, key, child):
+        assert key not in self.children
+        child.parent = self
+        self.children[key] = child
 
     def is_leaf(self):
-        return all(len(self.children[a]) == 0 for a in self.children)
+        return len(self.children) == 0
 
-    def add_child(self, a, s_prime, A):
-        child = Node(s_prime, A)
-        self.children[a].append(child)
-        return child
+
+class StateNode(Node):
+    def __init__(self, s):
+        super().__init__()
+        self.s = s
+    
+    def upper_confidence_bound_policy_action(self, env):
+        a = max(env.A, key=lambda a: self.children[a].upper_confidence_bound())
+        return self.children[a]
+
+
+class ActionNode(Node):
+    def __init__(self, a):
+        super().__init__()
+        self.a = a
+        self.q = 0.0
+        self.update_count = 1
+    
+    def add_next_state(self, s):
+        if s in self.children:
+            return
+        s_node = StateNode(s)
+        self.add_child(s, s_node)
+
+    def learning_rate(self):
+        lr = 1.0 / self.update_count
+        self.update_count += 1
+        return lr
+    
+    def upper_confidence_bound(self):
+        assert self.update_count > 0
+        ret = self.q / self.update_count
+        ret += np.sqrt(2.0 * np.log(self.parent_update_count()) / self.update_count)
+        return ret
+    
+    def parent_update_count(self):
+        node = self.parent.parent
+        if node:
+            return node.update_count
+        return 1.0
 
 
 class SearchTree:
     def __init__(self, env):
-        self.root = Node(env.start, env.A)
-        self.explored_nodes = {env.start: self.root}
-        self.update_counts = {}
-
-    def contains_leaf(self):
-        return any(node.is_leaf() for node in self.explored_nodes.values())
+        self.root = StateNode(env.start)
 
     def selection_step(self, env):
         cur = self.root
-        states = []
-        rewards = []
         while not cur.is_leaf():
-            rewards.append(env.R[cur.s])
-            if env.is_terminal_state(cur.s):
-                break
-            a = max(
-                cur.children,
-                key=lambda a: sum(node.v for node in cur.children[a]),
-            )
-            s_prime = env.step(cur.s, a)
-            states.append([cur.s, s_prime])
-            if s_prime not in cur.children[a]:
-                if s_prime in self.explored_nodes:
-                    child = self.explored_nodes[s_prime]
-                    cur.children[a].append(child)
-                else:
-                    self.explored_nodes[s_prime] = cur.add_child(a, s_prime, env.A)
-                cur = self.explored_nodes[s_prime]
+            a_node = cur.upper_confidence_bound_policy_action(env)
+            s_prime = env.step(cur.s, a_node.a)
+            if s_prime in a_node.children:
+                child = a_node.children[s_prime]
             else:
-                cur = self.explored_nodes[s_prime]
-        return cur, states, rewards
+                child = StateNode(s_prime)
+                a_node.add_child(s_prime, child)
+            if env.is_terminal_state(cur.s):
+                cur = child
+                break
+            cur = child
+        return cur
 
-    def expand_and_simulate_step(self, node, env):
-        if not node.is_leaf():
-            return [], []
+    def expand_and_simulate_step(self, env, s_node):
+        if not s_node.is_leaf():
+            return
         for a in env.A:
-            for _ in range(N_TRAJECTORIES_PER_ACTION):
-                s = env.step(node.s, a)
-                if s in self.explored_nodes:
-                    child = self.explored_nodes[s]
-                    if child not in node.children[a]:
-                        node.children[a].append(child)
-                else:
-                    self.explored_nodes[s] = node.add_child(a, s, env.A)
-                states = []
-                rewards = [env.R[s]]
+            a_node = ActionNode(a)
+            s_node.add_child(a, a_node)
+            rewards = []
+            for _ in range(N_SIMULATIONS_PER_ACTION):
+                s = env.step(s_node.s, a)
+                a_node.add_next_state(s)
                 for _ in range(MAX_STEPS_PER_TRAJECTORY):
-                    rewards.append(env.R[s])
-                    s_prime = env.step(s, a)
-                    states.append([s, s_prime])
                     if env.is_terminal_state(s):
+                        rewards.append(env.R[s])
                         break
-                    s = s_prime
+                    s = env.step(s, a)
                     a = env.random_action()
-        return states, rewards
-
-    def backprop_step(self, states, rewards, γ):
-        rewards = get_discounted_rewards(rewards, γ)
-        for (s, s_prime), r in zip(states, rewards):
-            if s in self.explored_nodes:
-                if s_prime in self.explored_nodes:
-                    dt = r - self.explored_nodes[s].v + γ * self.explored_nodes[s_prime].v
                 else:
-                    dt = r
-                self.explored_nodes[s].v += self._learning_rate(s) * dt
+                    rewards.append(0.0)
+            a_node.q = np.mean(rewards)
 
-    def _learning_rate(self, s):
-        t = self.update_counts.get(s, 0) + 1
-        self.update_counts[s] = t
-        return 1.0 / t
+    def backprop_step(self, node, γ):
+        for a_prime_node in node.children.values():
+            cur = node
+            while cur.parent:
+                a_node = cur.parent
+                s_node = a_node.parent
+                dt = env.R[s_node.s] - a_node.q + γ * a_prime_node.q
+                a_node.q += a_node.learning_rate() * dt
+                a_prime_node = a_node
+                cur = s_node
+    
+    def q_function(self):
+        Q = {}
+        counts = {}
+        frontier = [self.root]
+        while frontier:  # BFS over tree
+            new_frontier = []
+            for node in frontier:
+                s = node.s
+                for child in node.children.values():
+                    a = child.a
+                    counts[(s, a)] = counts.get((s, a), 0) + child.update_count
+                    Q[(s, a)] = Q.get((s, a), 0.0) + child.q
+                    new_frontier.extend(child.children.values())
+            frontier = new_frontier
+        return {sa: Q[sa] / counts[sa] for sa in Q.keys()}
 
-    def value_function(self):
-        return {s: node.v for s, node in self.explored_nodes.items()}
-
-    def policy(self, A):
-        return {
-            s: max(A, key=lambda a: sum(child.v for child in node.children[a]))
-            for s, node in self.explored_nodes.items()
-        }
-
-
-def get_discounted_rewards(rewards, γ):
-    result = [None] * len(rewards)
-    r_sum = 0.0
-    for i in range(len(rewards)-1, -1, -1):
-        r_sum *= γ
-        r_sum += rewards[i]
-        result[i] = r_sum
-    return result
+    def softmax_policy_value_function(self, env):
+        Q = self.q_function()
+        V = {}
+        for s in env.S:
+            V[s] = 0.0
+            for a in env.A:
+                q = Q.get((s, a), 0.0)
+                V[s] += np.exp(q) * q
+            V[s] /= sum(np.exp(Q.get((s, a), 0.0)) for a in env.A)
+        return V
+    
+    def argmax_policy(self, env):
+        Q = self.q_function()
+        π = {}
+        for s in env.S:
+            π[s] = max(env.A, key=lambda a: Q.get((s, a), -float('inf')))
+        return π
 
 
 if __name__ == '__main__':
