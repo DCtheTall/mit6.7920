@@ -9,25 +9,28 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from util.display import print_grid
 from util.gridworld import GridWorld
 from util.jax import MLP, Metrics, TrainState
 
 jax.config.update('jax_enable_x64', True)
 
 
-N_TRAIN_STEPS = 1
-N_TRAJECTORIES_PER_STEP = 1
+N_TRAIN_STEPS = 10
+N_TRAJECTORIES_PER_STEP = 10
 N_SIMULATIONS_PER_SEARCH = 1
-N_UPDATES_PER_STEP = 1
-BATCH_SIZE = 4
-N_UNROLL_STEPS = 5
+N_UPDATES_PER_STEP = 10
+BATCH_SIZE = 16
+N_UNROLL_STEPS = 4
 N_TD_STEPS = 10
 N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEATURES = 2 * N_FEATURES
 N_REPRESENTATION_FEATURES = N_FEATURES // 2
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-2
+LR_DECAY_RATE = 0.1
+LR_DECAY_STEPS = 10 * N_TRAIN_STEPS
 ROOT_DIRICHLET_ALPHA = 3e-2
 ROOT_EXPLORATION_FRACTION = 0.25
 MAX_TRAJECTORIES_PER_STEP = 100
@@ -38,22 +41,29 @@ def muzero(env, γ):
     net = Network()
     rng = jax.random.key(42)
     state = create_train_state(net, rng, features=N_FEATURES,
-                               η=LEARNING_RATE, β=0.9)
+                               η=LEARNING_RATE)
     del rng
     memory = ReplayMemory(maxlen=REPLAY_MEMORY_MAX_SIZE,
                           batch_size=BATCH_SIZE)
-
-    for _ in range(N_TRAIN_STEPS):
+    for step in range(N_TRAIN_STEPS):
+        print('Train step', step)
         # Step 1: Run MCTS simulation and collect history
+        print('Running self play...')
         for _ in range(N_TRAJECTORIES_PER_STEP):
             history = run_self_play(env, state, γ)
             memory.save_game(history)
 
         # Step 2: Train the model
+        print('Updating model...')
         for _ in range(N_UPDATES_PER_STEP):
             batch = memory.sample_batch(γ, unroll_steps=N_UNROLL_STEPS,
                                         td_steps=N_TD_STEPS)
-            print(batch)
+            init_features, actions, target_q, target_p = preprocess_batch(
+                env, batch)
+            grads = train_step(state, init_features, actions,
+                               target_q, target_p)
+            state = state.apply_gradients(grads=grads)
+    return state
 
 
 def run_self_play(env, state, γ):
@@ -68,7 +78,7 @@ def run_self_play(env, state, γ):
         tree.add_exploration_noise()
         monte_carlo_tree_search(tree, state, γ)
 
-        a = tree.softmax_action_with_temperature(int(step < 20))
+        a = tree.softmax_action_with_temperature(int(step < 10))
         history.save_step(s, a, tree)
         s_prime = env.step(s, a)
 
@@ -84,9 +94,9 @@ def monte_carlo_tree_search(tree, state, γ):
         h = leaf_node.parent.parent.hidden
         a = leaf_node.parent.int_action()
         policy_logits, q_values, hidden = state.apply_fn(
-            {'params': state.params}, h, np.array([a]),
+            {'params': state.params}, np.array([h]), np.array([a]),
             method=Network.recurrent_inference)
-        tree.expand_node(leaf_node, policy_logits, q_values, hidden)
+        tree.expand_node(leaf_node, policy_logits[0], q_values[0], hidden[0])
         tree.backprop_step(leaf_node, γ)
 
 
@@ -264,11 +274,13 @@ class ReplayMemory:
         return [
             {
                 'state': game.states[pos],
-                'actions': game.actions[pos:pos+unroll_steps],
-                'target_q_values': [t[0] for t in targets],
-                'target_policy': [t[1] for t in targets],
+                'actions': np.array([
+                    a.value for a in game.actions[pos:pos+unroll_steps]
+                ], dtype=np.int32),
+                'target_q_values': np.array(targets[i][0]),
+                'target_policy': np.array(targets[i][1]),
             }
-            for pos, game in zip(positions, games)
+            for i, (pos, game) in enumerate(zip(positions, games))
         ]
 
     def sample_game(self):
@@ -299,7 +311,7 @@ class Dynamics(nn.Module):
     @nn.compact
     def __call__(self, h, a):
         x = jnp.concatenate(
-            [h, nn.one_hot(a[...,0], self.n_actions, dtype=jnp.float64)],
+            [h, nn.one_hot(a, self.n_actions, dtype=jnp.float64)],
             axis=-1)
         x = MLP(features=self.hidden_dim,
                 n_layers=self.n_layers)(x)
@@ -321,12 +333,12 @@ class QValue(nn.Module):
         return x
 
 
-class Policy(QValue):
-    @nn.compact
-    def __call__(self, x):
-        x = super().__call__(x)
-        x = nn.softmax(x)
-        return x
+# class Policy(QValue):
+#     @nn.compact
+#     def __call__(self, x):
+#         x = super().__call__(x)
+#         x = nn.softmax(x)
+#         return x
 
 
 class Network(nn.Module):
@@ -338,12 +350,16 @@ class Network(nn.Module):
                           hidden_dim=N_HIDDEN_FEATURES,
                           n_layers=N_HIDDEN_LAYERS,
                           n_actions=N_ACTIONS)
-        self.policy = Policy(hidden_dim=N_HIDDEN_FEATURES,
-                             n_layers=N_HIDDEN_LAYERS,
-                             n_actions=N_ACTIONS)
+        # self.policy = Policy(hidden_dim=N_HIDDEN_FEATURES,
+        #                      n_layers=N_HIDDEN_LAYERS,
+        #                      n_actions=N_ACTIONS)
         self.qvalue = QValue(hidden_dim=N_HIDDEN_FEATURES,
                              n_layers=N_HIDDEN_LAYERS,
                              n_actions=N_ACTIONS)
+        
+    def policy(self, h):
+        x = self.qvalue(h)
+        return nn.softmax(x)
 
     def initial_inference(self, x):
         h = self.h(x)
@@ -354,25 +370,66 @@ class Network(nn.Module):
         return self.policy(h_prime), self.qvalue(h_prime), h_prime
     
     def __call__(self, x0, actions):
-        p, q, h = self.initial_inference(x0)
-        ps, qs = [p], [q]
-        for i in range(actions.shape[-2]):
-            a = actions[:,i,:]
-            print(a.shape)
+        _, _, h = self.initial_inference(x0)
+        qs, ps = [], []
+        for i in range(actions.shape[-1]):
+            a = actions[:,i]
             p, q, h = self.recurrent_inference(h, a)
-            ps.append(p)
             qs.append(q)
-        return jnp.stack(ps), jnp.stack(qs)
-        
+            ps.append(p)
+        return jnp.stack(qs, axis=1), jnp.stack(ps, axis=1)
 
-def create_train_state(net, rng, η, features, β=None):
+
+def create_train_state(net, rng, η, features, β=0.9,
+                       decay_rate=LR_DECAY_RATE,
+                       decay_steps=LR_DECAY_STEPS):
     params = net.init(rng,
                       jnp.ones([1, features], dtype=jnp.float64),
-                      jnp.ones([1, 1, 1], dtype=jnp.int32))['params']
-    tx = optax.sgd(η, β)
+                      jnp.ones([1, 1], dtype=jnp.int32))['params']
+    lr_sched = optax.exponential_decay(
+        init_value=η,
+        decay_rate=decay_rate,
+        transition_steps=decay_steps,
+        end_value=0.0)
+    tx = optax.sgd(lr_sched, β)
     return TrainState.create(
         apply_fn=net.apply, params=params, tx=tx,
         metrics=Metrics.empty())
+
+
+def preprocess_batch(env, batch):
+    init_features = []
+    actions = []
+    target_q = []
+    target_p = []
+    for example in batch:
+        s = example['state']
+        init_features.append(env.ϕ[s])
+        actions.append(example['actions'])
+        target_q.append(example['target_q_values'])
+        target_p.append(example['target_policy'])
+    return (np.array(init_features), np.array(actions),
+            np.array(target_q), np.array(target_p))
+
+
+@jax.jit
+def train_step(state, init_features, actions, target_q, target_p):
+    def loss_fn(params):
+        pred_q, pred_p = state.apply_fn({'params': params}, init_features, actions)
+        q_loss = jnp.mean((target_q - pred_q) ** 2.0) ** 0.5
+        p_loss = jnp.sum(-target_p * jnp.log(pred_p))
+        return q_loss + p_loss
+    return jax.grad(loss_fn)(state.params)
+
+
+def optimal_policy(env, state):
+    π = {}
+    for s in env.S:
+        x = env.ϕ[s]
+        policy_logits, _, _ = state.apply_fn(
+            {'params': state.params}, x, method=Network.initial_inference)
+        π[s] = max(env.A, key=lambda a: policy_logits[a.value])
+    return π
 
 
 if __name__ == '__main__':
@@ -381,4 +438,8 @@ if __name__ == '__main__':
     # Discount
     γ = 0.75
 
-    muzero(env, γ)
+    state = muzero(env, γ)
+    π_opt = optimal_policy(env, state)
+
+    print('Optimal policy:')
+    print_grid(π_opt)
