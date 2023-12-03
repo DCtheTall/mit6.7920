@@ -40,9 +40,9 @@ class TrainState(train_state.TrainState):
     metrics: Metrics
 
 
-def create_sgd_train_state(net, rng, η, features):
+def create_sgd_train_state(net, rng, η, features, β=None):
     params = net.init(rng, jnp.ones([1, features]))['params']
-    tx = optax.sgd(η)
+    tx = optax.sgd(η, β)
     return TrainState.create(
         apply_fn=net.apply, params=params, tx=tx,
         metrics=Metrics.empty())

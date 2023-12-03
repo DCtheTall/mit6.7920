@@ -29,7 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from util.display import print_grid
-from util.jax import MLP, Metrics, TrainState
+from util.jax import MLP, create_sgd_train_state
 from util.gridworld import GridWorld
 
 jax.config.update('jax_enable_x64', True)
@@ -49,7 +49,8 @@ def a2c(env, γ, λ, T=100):
     V_net = Critic(hidden_dim=N_HIDDEN_FEATURES,
                    n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(13)
-    V_state = create_train_state(V_net, rng, η=CRITIC_LEARNING_RATE)
+    V_state = create_sgd_train_state(V_net, rng, η=CRITIC_LEARNING_RATE,
+                                     features=N_FEATURES)
     del rng
 
     # Initialize actor but its parameters will be copied
@@ -57,7 +58,8 @@ def a2c(env, γ, λ, T=100):
     π_net = Actor(hidden_dim=N_HIDDEN_FEATURES,
                   n_layers=N_HIDDEN_LAYERS)
     rng = jax.random.key(0)
-    π_state = create_train_state(π_net, rng, η=ACTOR_LEARNING_RATE)
+    π_state = create_sgd_train_state(π_net, rng, η=ACTOR_LEARNING_RATE,
+                                     features=N_FEATURES)
     del rng
 
     for _ in range(N_TRAJECTORIES):
@@ -131,14 +133,6 @@ class Critic(NetworkBase):
     def __call__(self, x):
         x = super().__call__(x)
         return jnp.sum(x, axis=-1)
-
-
-def create_train_state(net, rng, η):
-    params = net.init(rng, jnp.ones([1, N_FEATURES]))['params']
-    tx = optax.sgd(η)
-    return TrainState.create(
-        apply_fn=net.apply, params=params, tx=tx,
-        metrics=Metrics.empty())
 
 
 def temporal_difference(r, γ, v, v_prime):
