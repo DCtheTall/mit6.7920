@@ -26,7 +26,7 @@ jax.config.update('jax_enable_x64', True)
 N_TRAIN_STEPS = 10
 N_TRAJECTORIES_PER_STEP = 10
 N_SIMULATIONS_PER_SEARCH = 10
-N_UPDATES_PER_STEP = 64
+N_UPDATES_PER_STEP = 10
 BATCH_SIZE = 32
 N_UNROLL_STEPS = 6
 N_TD_STEPS = 0
@@ -35,7 +35,7 @@ N_ACTIONS = 4
 N_HIDDEN_LAYERS = 4
 N_HIDDEN_FEATURES = 2 * N_FEATURES
 N_REPRESENTATION_FEATURES = N_FEATURES
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-4
 LR_DECAY_RATE = 0.1
 LR_DECAY_STEPS = 1000
 ROOT_DIRICHLET_ALPHA = 3e-2
@@ -66,10 +66,10 @@ def muzero(env, γ):
         for _ in range(N_UPDATES_PER_STEP):
             batch = memory.sample_batch(γ, unroll_steps=N_UNROLL_STEPS,
                                         td_steps=N_TD_STEPS)
-            init_features, actions, target_q, target_p = preprocess_batch(
+            init_features, actions, target_v, target_p = preprocess_batch(
                 env, batch)
             grads = train_step(state, init_features, actions,
-                               target_q, target_p)
+                               target_v, target_p)
             state = state.apply_gradients(grads=grads)
     return state
 
@@ -80,13 +80,13 @@ def run_self_play(env, state, γ):
     for step in range(MAX_STEPS_PER_TRAJECTORY):
         tree = SearchTree(env, s)
         x = env.ϕ[s]
-        policy_logits, q_values, hidden = state.apply_fn(
+        policy_logits, value, hidden = state.apply_fn(
             {'params': state.params}, x, method=Network.initial_inference)
         print('S', step, s)
         print('P', policy_logits)
-        print('Q', q_values)
+        print('V', value)
         print('H', hidden)
-        tree.expand_node(tree.root, policy_logits, q_values, hidden)
+        tree.expand_node(tree.root, policy_logits, value, hidden)
         tree.add_exploration_noise()
         monte_carlo_tree_search(tree, state, γ)
 
@@ -107,10 +107,10 @@ def monte_carlo_tree_search(tree, state, γ):
         leaf_node = tree.selection_step()
         h = leaf_node.parent.parent.hidden
         a = leaf_node.parent.a.value
-        policy_logits, q_values, hidden = state.apply_fn(
+        policy_logits, values, hidden = state.apply_fn(
             {'params': state.params}, np.array([h]), np.array([a]),
             method=Network.recurrent_inference)
-        tree.expand_node(leaf_node, policy_logits[0], q_values[0], hidden[0])
+        tree.expand_node(leaf_node, policy_logits[0], values[0], hidden[0])
         tree.backprop_step(leaf_node, γ)
 
 
@@ -118,6 +118,7 @@ class Node:
     def __init__(self):
         self.children = {}
         self.parent = None
+        self.visit_count = 1
 
     def add_child(self, key, child):
         assert key not in self.children
@@ -133,36 +134,42 @@ class StateNode(Node):
         super().__init__()
         self.s = s
         self.hidden = None
-
+        self.value = 0.0
+    
+    def learning_rate(self):
+        return 1.0 / self.visit_count
+    
     def upper_confidence_bound_policy_action(self, env):
         a = max(env.A, key=lambda a: self.children[a].upper_confidence_bound())
         return self.children[a]
 
 
 class ActionNode(Node):
-    def __init__(self, a, q, prior):
+    def __init__(self, a, prior):
         super().__init__()
         self.a = a
-        self.q = q
         self.prior = prior
-        self.visit_count = 1
 
+    def avg_value(self):
+        if self.is_leaf():
+            return 0.0
+        v = 0.0
+        for child in self.children.values():
+            v += child.value
+        return v / len(self.children)
+    
     def upper_confidence_bound(self):
-        ret = self.q / self.visit_count
+        ret = self.avg_value() / self.visit_count
         ret += self.prior * UCB_COEFF * np.sqrt(
             np.log(self.parent_visit_count() / self.visit_count))
         return ret
-
+    
     def parent_visit_count(self):
         node = self.parent.parent
         if node:
             return node.visit_count
         return self.visit_count
 
-    def learning_rate(self):
-        lr = 1.0 / self.visit_count
-        self.visit_count += 1
-        return lr
 
 
 class SearchTree:
@@ -170,12 +177,13 @@ class SearchTree:
         self.env = env
         self.root = StateNode(start)
 
-    def expand_node(self, node, policy_logits, q_values, hidden):
+    def expand_node(self, node, policy_logits, value, hidden):
         if not node.is_leaf():
             return
         node.hidden = hidden
-        for a, q, p in zip(self.env.A, q_values, policy_logits):
-            a_node = ActionNode(a, q, p)
+        node.value = value[0]
+        for a, p in zip(self.env.A, policy_logits):
+            a_node = ActionNode(a, p)
             node.add_child(a, a_node)
 
     def add_exploration_noise(self):
@@ -202,21 +210,25 @@ class SearchTree:
         return cur
 
     def backprop_step(self, node, γ):
-        for a_prime_node in node.children.values():
-            cur = node
-            while cur.parent:
-                a_node = cur.parent
-                s_node = a_node.parent
-                dt = env.R[s_node.s] - a_node.q + γ * a_prime_node.q
-                a_node.q += a_node.learning_rate() * dt
-                a_prime_node = a_node
-                cur = s_node
+        v_prime = node.value
+        cur = node
+        while cur.parent:
+            a_node = cur.parent
+            a_node.visit_count += 1
+            s_node = a_node.parent
+            s_node.visit_count += 1
+            dt = env.R[s_node.s] - s_node.value + γ * v_prime
+            s_node.value += s_node.learning_rate() * dt
+            cur = s_node
+            v_prime = s_node.value
+
 
     def softmax_action_with_temperature(self, temp):
         if temp == 0:
-            return max(self.env.A, key=lambda a: self.root.children[a].q)
-        logits = np.array(
-            [np.exp(a_node.q) for a_node in self.root.children.values()])
+            return max(self.env.A,
+                       key=lambda a: self.root.children[a].avg_value())
+        logits = np.array([np.exp(a_node.avg_value())
+                           for a_node in self.root.children.values()])
         logits /= sum(logits)
         return np.random.choice(self.env.A, p=logits)
 
@@ -227,18 +239,17 @@ class GameHistory:
         self.states = []
         self.actions = []
         self.rewards = []
-        self.root_q_values = []
+        self.root_values = []
         self.visit_counts = []
 
     def save_step(self, s, a, tree):
         self.states.append(s)
         self.actions.append(a)
         self.rewards.append(self.env.R[s])
-        q_values = np.array([child.q for child in tree.root.children.values()])
-        self.root_q_values.append(q_values)
-        visit_counts = np.array(
-            [child.visit_count for child in tree.root.children.values()],
-            dtype=np.float64)
+        self.root_values.append(tree.root.value)
+        visit_counts = np.array([child.visit_count
+                                 for child in tree.root.children.values()],
+                                dtype=np.float64)
         visit_counts /= sum(visit_counts)
         self.visit_counts.append(visit_counts)
 
@@ -247,22 +258,21 @@ class GameHistory:
         return len(self.rewards)
 
     def make_targets(self, start_pos, unroll_steps, td_steps, γ):
-        target_q = []
+        target_v = []
         target_p = []
         for cur_idx in range(start_pos, start_pos + unroll_steps):
-            a = self.actions[cur_idx].value
             bootstrap_idx = cur_idx + td_steps
-            if bootstrap_idx >= len(self.root_q_values):
-                q = 0.0
+            if bootstrap_idx >= len(self.root_values):
+                v = 0.0
             else:
-                q = self.root_q_values[bootstrap_idx][a]
-                q *= γ ** td_steps
+                v = self.root_values[bootstrap_idx]
+                v *= γ ** td_steps
             rs = self.rewards[cur_idx:]
             for i, r in enumerate(reversed(rs)):
-                q += self.visit_counts[cur_idx][a] * r * γ ** (len(rs) - 1 - i)
-            target_q.append([q])
+                v += r * γ ** (len(rs) - 1 - i)
+            target_v.append([v])
             target_p.append(self.visit_counts[cur_idx])
-        return target_q, target_p
+        return target_v, target_p
 
 
 class ReplayMemory:
@@ -293,7 +303,7 @@ class ReplayMemory:
                 'actions': np.array([
                     a.value for a in game.actions[pos:pos+unroll_steps]
                 ], dtype=np.int32),
-                'target_q_values': np.array(targets[i][0]),
+                'target_values': np.array(targets[i][0]),
                 'target_policy': np.array(targets[i][1]),
             }
             for i, (pos, game) in enumerate(zip(positions, games))
@@ -337,7 +347,7 @@ class Dynamics(nn.Module):
         return x
 
 
-class QValue(nn.Module):
+class Policy(nn.Module):
     hidden_dim: int
     n_layers: int
     n_actions: int
@@ -346,16 +356,22 @@ class QValue(nn.Module):
     def __call__(self, x):
         x = MLP(features=self.hidden_dim,
                 n_layers=self.n_layers)(x)
-        x = nn.Dense(features=self.n_actions)(x)
+        x = nn.Dense(self.n_actions)(x)
+        x = nn.softmax(x)
         return x
 
 
-# class Policy(QValue):
-#     @nn.compact
-#     def __call__(self, x):
-#         x = super().__call__(x)
-#         x = nn.softmax(x)
-#         return x
+class Value(nn.Module):
+    hidden_dim: int
+    n_layers: int
+    n_actions: int
+
+    @nn.compact
+    def __call__(self, x):
+        x = MLP(features=self.hidden_dim,
+                n_layers=self.n_layers)(x)
+        x = nn.Dense(1)(x)
+        return x
 
 
 class Network(nn.Module):
@@ -367,37 +383,31 @@ class Network(nn.Module):
                           hidden_dim=N_HIDDEN_FEATURES,
                           n_layers=N_HIDDEN_LAYERS,
                           n_actions=N_ACTIONS)
-        # self.policy = Policy(hidden_dim=N_HIDDEN_FEATURES,
-        #                      n_layers=N_HIDDEN_LAYERS,
-        #                      n_actions=N_ACTIONS)
-        self.policy_ff = nn.Dense(N_ACTIONS)
-        self.qvalue = QValue(hidden_dim=N_HIDDEN_FEATURES,
+        self.policy = Policy(hidden_dim=N_HIDDEN_FEATURES,
                              n_layers=N_HIDDEN_LAYERS,
                              n_actions=N_ACTIONS)
-
-    def policy(self, h):
-        x = self.qvalue(h)
-        x = self.policy_ff(x)
-        return nn.softmax(x)
+        self.value = Value(hidden_dim=N_HIDDEN_FEATURES,
+                           n_layers=N_HIDDEN_LAYERS,
+                           n_actions=N_ACTIONS)
 
 
     def initial_inference(self, x):
         h = self.h(x)
-        return self.policy(h), self.qvalue(h), h
+        return self.policy(h), self.value(h), h
 
     def recurrent_inference(self, h, a):
         h_prime = self.g(h, a)
-        return self.policy(h_prime), self.qvalue(h_prime), h_prime
+        return self.policy(h_prime), self.value(h_prime), h_prime
 
     def __call__(self, x0, actions):
         _, _, h = self.initial_inference(x0)
-        qs, ps = [], []
+        vs, ps = [], []
         for i in range(actions.shape[-1]):
             a = actions[:,i]
-            p, q, h = self.recurrent_inference(h, a)
-            qs.append(q)
+            p, v, h = self.recurrent_inference(h, a)
+            vs.append(v)
             ps.append(p)
-        return jnp.stack(qs, axis=1), jnp.stack(ps, axis=1)
+        return jnp.stack(vs, axis=1), jnp.stack(ps, axis=1)
 
 
 def create_train_state(net, rng, η, features, β=0.9,
@@ -420,25 +430,23 @@ def create_train_state(net, rng, η, features, β=0.9,
 def preprocess_batch(env, batch):
     init_features = []
     actions = []
-    target_q = []
+    target_v = []
     target_p = []
     for example in batch:
         s = example['state']
         init_features.append(env.ϕ[s])
         actions.append(example['actions'])
-        target_q.append(example['target_q_values'])
+        target_v.append(example['target_values'])
         target_p.append(example['target_policy'])
     return (np.array(init_features), np.array(actions),
-            np.array(target_q), np.array(target_p))
+            np.array(target_v), np.array(target_p))
 
 
 @jax.jit
-def train_step(state, init_features, actions, target_q, target_p):
+def train_step(state, init_features, actions, target_v, target_p):
     def loss_fn(params):
-        pred_q, pred_p = state.apply_fn({'params': params}, init_features, actions)
-        a_idx = jnp.expand_dims(actions, axis=-1)
-        pred_q = jnp.take_along_axis(pred_q, a_idx, axis=-1)
-        q_loss = jnp.mean((target_q - pred_q) ** 2.0) ** 0.5
+        pred_v, pred_p = state.apply_fn({'params': params}, init_features, actions)
+        q_loss = jnp.mean((target_v - pred_v) ** 2.0) ** 0.5
         p_loss = -jnp.sum(target_p * jnp.log2(pred_p))
         return q_loss + p_loss
     return jax.grad(loss_fn)(state.params)
