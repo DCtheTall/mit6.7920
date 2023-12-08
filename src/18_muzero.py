@@ -29,11 +29,10 @@ N_SIMULATIONS_PER_SEARCH = 10
 N_UPDATES_PER_STEP = 10
 BATCH_SIZE = 32
 N_UNROLL_STEPS = 6
-N_TD_STEPS = 0
 N_FEATURES = 8
 N_ACTIONS = 4
-N_HIDDEN_LAYERS = 4
-N_HIDDEN_FEATURES = 2 * N_FEATURES
+N_HIDDEN_LAYERS = 2
+N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_REPRESENTATION_FEATURES = N_FEATURES
 LEARNING_RATE = 1e-4
 LR_DECAY_RATE = 0.1
@@ -64,12 +63,11 @@ def muzero(env, γ):
         # Step 2: Train the model
         print('Updating model...')
         for _ in range(N_UPDATES_PER_STEP):
-            batch = memory.sample_batch(γ, unroll_steps=N_UNROLL_STEPS,
-                                        td_steps=N_TD_STEPS)
+            batch = memory.sample_batch(γ, unroll_steps=N_UNROLL_STEPS)
             init_features, actions, target_v, target_p = preprocess_batch(
                 env, batch)
             grads = train_step(state, init_features, actions,
-                               target_v, target_p)
+                               target_v, target_p, γ)
             state = state.apply_gradients(grads=grads)
     return state
 
@@ -257,22 +255,13 @@ class GameHistory:
     def length(self):
         return len(self.rewards)
 
-    def make_targets(self, start_pos, unroll_steps, td_steps, γ):
-        target_v = []
+    def make_targets(self, start_pos, unroll_steps):
+        rewards = []
         target_p = []
         for cur_idx in range(start_pos, start_pos + unroll_steps):
-            bootstrap_idx = cur_idx + td_steps
-            if bootstrap_idx >= len(self.root_values):
-                v = 0.0
-            else:
-                v = self.root_values[bootstrap_idx]
-                v *= γ ** td_steps
-            rs = self.rewards[cur_idx:]
-            for i, r in enumerate(reversed(rs)):
-                v += r * γ ** (len(rs) - 1 - i)
-            target_v.append([v])
+            rewards.append([self.rewards[cur_idx]])
             target_p.append(self.visit_counts[cur_idx])
-        return target_v, target_p
+        return rewards, target_p
 
 
 class ReplayMemory:
@@ -288,14 +277,14 @@ class ReplayMemory:
         self.length = min(self.length + 1, self.maxlen)
         self.index = (self.index + 1) % self.maxlen
 
-    def sample_batch(self, γ, unroll_steps, td_steps):
+    def sample_batch(self, γ, unroll_steps):
         games = [self.sample_game() for _ in range(self.batch_size)]
         positions = [
             (np.random.randint(0, game.length - unroll_steps)
              if game.length > unroll_steps else 0)
             for game in games
         ]
-        targets = [game.make_targets(pos, unroll_steps, td_steps, γ)
+        targets = [game.make_targets(pos, unroll_steps)
                    for (pos, game) in zip(positions, games)]
         return [
             {
@@ -303,7 +292,7 @@ class ReplayMemory:
                 'actions': np.array([
                     a.value for a in game.actions[pos:pos+unroll_steps]
                 ], dtype=np.int32),
-                'target_values': np.array(targets[i][0]),
+                'rewards': np.array(targets[i][0]),
                 'target_policy': np.array(targets[i][1]),
             }
             for i, (pos, game) in enumerate(zip(positions, games))
@@ -400,14 +389,17 @@ class Network(nn.Module):
         return self.policy(h_prime), self.value(h_prime), h_prime
 
     def __call__(self, x0, actions):
-        _, _, h = self.initial_inference(x0)
-        vs, ps = [], []
+        p, v, h = self.initial_inference(x0)
+        ps, vs, v_primes = [p], [v], []
         for i in range(actions.shape[-1]):
             a = actions[:,i]
             p, v, h = self.recurrent_inference(h, a)
-            vs.append(v)
             ps.append(p)
-        return jnp.stack(vs, axis=1), jnp.stack(ps, axis=1)
+            vs.append(v)
+            v_primes.append(v)
+        ps.pop()
+        vs.pop()
+        return jnp.stack(ps, axis=1), jnp.stack(vs, axis=1), jnp.stack(v_primes, axis=1)
 
 
 def create_train_state(net, rng, η, features, β=0.9,
@@ -430,36 +422,40 @@ def create_train_state(net, rng, η, features, β=0.9,
 def preprocess_batch(env, batch):
     init_features = []
     actions = []
-    target_v = []
+    rewards = []
     target_p = []
     for example in batch:
         s = example['state']
         init_features.append(env.ϕ[s])
         actions.append(example['actions'])
-        target_v.append(example['target_values'])
+        rewards.append(example['rewards'])
         target_p.append(example['target_policy'])
     return (np.array(init_features), np.array(actions),
-            np.array(target_v), np.array(target_p))
+            np.array(rewards), np.array(target_p))
 
 
 @jax.jit
-def train_step(state, init_features, actions, target_v, target_p):
+def train_step(state, init_features, actions, rewards, target_p, γ):
     def loss_fn(params):
-        pred_v, pred_p = state.apply_fn({'params': params}, init_features, actions)
-        q_loss = jnp.mean((target_v - pred_v) ** 2.0) ** 0.5
+        pred_p, v, v_prime = state.apply_fn(
+            {'params': params}, init_features, actions)
+        dt = rewards - v + γ * v_prime
+        v_loss = -jnp.sum(dt * v)
         p_loss = -jnp.sum(target_p * jnp.log2(pred_p))
-        return q_loss + p_loss
+        return 10.0 * v_loss + p_loss
     return jax.grad(loss_fn)(state.params)
 
 
-def optimal_policy(env, state):
+def optimal_policy_and_value_function(env, state):
     π = {}
+    V = {}
     for s in env.S:
         x = env.ϕ[s]
-        policy_logits, _, _ = state.apply_fn(
+        policy_logits, value, _ = state.apply_fn(
             {'params': state.params}, x, method=Network.initial_inference)
         π[s] = max(env.A, key=lambda a: policy_logits[a.value])
-    return π
+        V[s] = value[0]
+    return π, V
 
 
 if __name__ == '__main__':
@@ -469,7 +465,9 @@ if __name__ == '__main__':
     γ = 0.75
 
     state = muzero(env, γ)
-    π_opt = optimal_policy(env, state)
+    π_opt, V_opt = optimal_policy_and_value_function(env, state)
 
     print('Optimal policy:')
     print_grid(π_opt)
+    print('Optimal value function:')
+    print_grid(V_opt)

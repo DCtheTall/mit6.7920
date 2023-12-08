@@ -144,9 +144,7 @@ def compute_critic_gradients(V_state, z, dt, x):
     def loss_fn(params):
         v = V_state.apply_fn({'params': params}, x)
         return -dt * z * jnp.sum(v)
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(V_state.params)
-    return grads
+    return jax.grad(loss_fn)(V_state.params)
 
 
 @jax.jit
