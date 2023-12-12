@@ -2,7 +2,7 @@
 Implementation of Monte Carlo Tree Search (MCTS)
 ================================================
 Implementation of MCTS on grid world for policy and value estimation.
-The backprop stage uses TD(0) updates for Q-learning 
+The backprop stage uses TD(0) updates for Q-learning
 
 While exporing the tree, the agent maximizes the Upper Confidence Bound (UCB)
 instead of the Q-value.
@@ -17,14 +17,14 @@ The final policy displayed chooses the action which maximizes the Q-value.
 Result:
 -------
 Optimal value function:
--0.27408764121410484	 -0.17437915213263658	 0.12876349788010008	 1.0	
--0.38885876795797336	 -0.3713295360048853	 -0.4599398521544408	 -1.0252759899406472	
--0.44809516010401323	 -0.489196818690537	 -0.5373703759940026	 -0.7304696456246579	
--0.483561231711909	 -0.5069863489473597	 -0.5731413327533	 -0.6805037640122068	
+-0.27408764121410484	 -0.17437915213263658	 0.12876349788010008	 1.0
+-0.38885876795797336	 -0.3713295360048853	 -0.4599398521544408	 -1.0252759899406472
+-0.44809516010401323	 -0.489196818690537	 -0.5373703759940026	 -0.7304696456246579
+-0.483561231711909	 -0.5069863489473597	 -0.5731413327533	 -0.6805037640122068
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up	
-Action.Up	 Action.Up	 Action.Left	 Action.Left	
-Action.Up	 Action.Up	 Action.Left	 Action.Down	
+Action.Up	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Up	 Action.Left	 Action.Left
+Action.Up	 Action.Up	 Action.Left	 Action.Down
 Action.Up	 Action.Left	 Action.Left	 Action.Up
 
 """
@@ -73,7 +73,7 @@ class StateNode(Node):
     def __init__(self, s):
         super().__init__()
         self.s = s
-    
+
     def upper_confidence_bound_policy_action(self, env):
         a = max(env.A, key=lambda a: self.children[a].upper_confidence_bound())
         return self.children[a]
@@ -85,7 +85,7 @@ class ActionNode(Node):
         self.a = a
         self.q = 0.0
         self.update_count = 1
-    
+
     def add_next_state(self, s):
         if s in self.children:
             return
@@ -96,13 +96,13 @@ class ActionNode(Node):
         lr = 1.0 / self.update_count
         self.update_count += 1
         return lr
-    
+
     def upper_confidence_bound(self):
         ret = self.q / self.update_count
         ret += np.sqrt(
-            2.0 * np.log(self.parent_update_count() / self.update_count))
+            2.0 * np.log(self.parent_update_count()) / self.update_count)
         return ret
-    
+
     def parent_update_count(self):
         node = self.parent.parent
         if node:
@@ -160,7 +160,7 @@ class SearchTree:
                 a_node.q += a_node.learning_rate() * dt
                 a_prime_node = a_node
                 cur = s_node
-    
+
     def q_function(self):
         Q = {}
         counts = {}
@@ -187,7 +187,7 @@ class SearchTree:
                 V[s] += np.exp(q) * q
             V[s] /= sum(np.exp(Q.get((s, a), 0.0)) for a in env.A)
         return V
-    
+
     def argmax_policy(self, env):
         Q = self.q_function()
         π = {}
