@@ -2,16 +2,23 @@
 Implementation of MuZero
 ========================
 
-Learns static GridWorld.
+MuZero learning static GridWorld.
 
-TODO build Stochastic MuZero for stochastic GridWorld.
+We can use Stochastic MuZero for stochastic GridWorld.
 
-Result after 100 steps, LR=1e-3
+TODO improve value learnings
+
+Result after 2000s steps, LR=1e-3
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Right	 Action.Right	 Action.Up	 Action.Right
 Action.Right	 Action.Right	 Action.Right	 Action.Right
+Action.Right	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Up	 Action.Up	 Action.Left
+Action.Up	 Action.Up	 Action.Up	 Action.Left
+Optimal value function:
+0.3754306668596923	 0.5664651036982716	 0.692335936421984	 0.7692654502297642
+0.313623940174137	 0.5202218106333281	 0.6603674366839039	 0.8365843337210068
+0.14157115827339606	 0.39752867611377307	 0.45337326014448937	 0.4373630419032434
+0.19373376979370338	 0.2760506845049847	 0.38961582339979195	 0.39675512815049896
 
 """
 
@@ -27,25 +34,25 @@ from util.jax import MLP, Metrics, TrainState
 jax.config.update('jax_enable_x64', True)
 
 
-N_TRAIN_STEPS = 200
-N_TRAJECTORIES_PER_STEP = 10
-N_SIMULATIONS_PER_SEARCH = 20
-N_UPDATES_PER_STEP = 10
-BATCH_SIZE = 64
+N_TRAIN_STEPS = 2000
+N_TRAJECTORIES_PER_STEP = 1
+N_SIMULATIONS_PER_SEARCH = 32
+N_UPDATES_PER_STEP = 1
+BATCH_SIZE = 32
 N_UNROLL_STEPS = 8
-N_TD_STEPS = 4
+N_TD_STEPS = 1
 N_FEATURES = 8
 N_ACTIONS = 4
-N_HIDDEN_LAYERS = 2
+N_HIDDEN_LAYERS = 1
 N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_REPRESENTATION_FEATURES = N_FEATURES
 LEARNING_RATE = 1e-3
 LR_DECAY_RATE = 0.1
-LR_DECAY_STEPS = 400
+LR_DECAY_STEPS = 2400
 ROOT_DIRICHLET_ALPHA = 3e-2
 ROOT_EXPLORATION_FRACTION = 0.25
 MAX_STEPS_PER_TRAJECTORY = 100
-REPLAY_MEMORY_MAX_SIZE = 200
+REPLAY_MEMORY_MAX_SIZE = 100
 UCB_COEFF = 2.0 ** 0.5
 
 
@@ -284,7 +291,6 @@ class GameHistory:
         target_p = []
         target_v = []
         target_r = []
-        v = 0.0
         discounted_rewards = self.discounted_rewards(γ)
         for cur_idx in range(start_pos, start_pos + unroll_steps):
             if cur_idx >= len(self.rewards):
@@ -368,7 +374,7 @@ class Representation(nn.Module):
                 n_layers=self.n_layers)(x)
         x = nn.Dense(self.output_dim,
                      dtype=jnp.float64)(x)
-        return nn.sigmoid(x)
+        return x
 
 
 class Dynamics(nn.Module):
@@ -388,7 +394,7 @@ class Dynamics(nn.Module):
         x = nn.Dense(self.input_dim + 1,
                      dtype=jnp.float64)(x)
         x, r = jnp.split(x, [self.input_dim], axis=-1)
-        return nn.sigmoid(x), r
+        return x, r
 
 
 class Policy(nn.Module):
