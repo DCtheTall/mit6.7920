@@ -4,21 +4,22 @@ Implementation of MuZero
 
 MuZero learning static GridWorld.
 
-We can use Stochastic MuZero for stochastic GridWorld.
+Value network uses TD learning instead of the MSE objective in the paper.
+Network parameters are trained using Adam and regularized with an L2 norm.
 
-TODO improve value learnings
+I could use Stochastic MuZero for stochastic GridWorld.
 
-Result after 2000s steps, LR=1e-3
+Result:
 Optimal policy:
 Action.Right	 Action.Right	 Action.Right	 Action.Right
-Action.Right	 Action.Up	 Action.Up	 Action.Up
+Action.Right	 Action.Up	 Action.Up	 Action.Right
 Action.Up	 Action.Up	 Action.Up	 Action.Left
-Action.Up	 Action.Up	 Action.Up	 Action.Left
+Action.Up	 Action.Right	 Action.Down	 Action.Down
 Optimal value function:
-0.3754306668596923	 0.5664651036982716	 0.692335936421984	 0.7692654502297642
-0.313623940174137	 0.5202218106333281	 0.6603674366839039	 0.8365843337210068
-0.14157115827339606	 0.39752867611377307	 0.45337326014448937	 0.4373630419032434
-0.19373376979370338	 0.2760506845049847	 0.38961582339979195	 0.39675512815049896
+0.33188821997616236	 0.3800520373255142	 0.42502627268711124	 0.4472067461165279
+0.22278647244949368	 0.2469505145776092	 0.2688419338052558	 0.3817005932789591
+0.10093123496615979	 0.11653650167041306	 0.1276269697259923	 0.11888388885939849
+0.05894372760573408	 0.058283115424510964	 0.06492226568457657	 0.07028869392155321
 
 """
 
@@ -38,9 +39,8 @@ N_TRAIN_STEPS = 2000
 N_TRAJECTORIES_PER_STEP = 1
 N_SIMULATIONS_PER_SEARCH = 32
 N_UPDATES_PER_STEP = 1
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 N_UNROLL_STEPS = 8
-N_TD_STEPS = 1
 N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 1
@@ -54,6 +54,7 @@ ROOT_EXPLORATION_FRACTION = 0.25
 MAX_STEPS_PER_TRAJECTORY = 100
 REPLAY_MEMORY_MAX_SIZE = 100
 UCB_COEFF = 2.0 ** 0.5
+L2_REGULARIZER_SCALE = 1e-1
 
 
 def muzero(env, γ):
@@ -75,11 +76,11 @@ def muzero(env, γ):
         # Step 2: Train the model
         print('Updating model...')
         for _ in range(N_UPDATES_PER_STEP):
-            batch = memory.sample_batch(N_UNROLL_STEPS, N_TD_STEPS, γ)
-            init_features, actions, target_p, target_v, target_r = (
-                preprocess_batch(env, batch))
+            batch = memory.sample_batch(N_UNROLL_STEPS)
+            init_features, actions, target_p, target_r = preprocess_batch(
+                env, batch)
             grads = train_step(state, init_features, actions, target_p,
-                               target_v, target_r)
+                               target_r, γ)
             state = state.apply_gradients(grads=grads)
         π, V = optimal_policy_and_value_function(env, state)
         print('Policy for step', step)
@@ -268,7 +269,6 @@ class GameHistory:
         self.actions = []
         self.rewards = []
         self.visit_counts = []
-        self.root_values = []
 
     def save_step(self, s, a, tree):
         self.states.append(s)
@@ -281,39 +281,22 @@ class GameHistory:
         visit_counts /= sum(visit_counts)
         print('Pt', s, visit_counts)
         self.visit_counts.append(visit_counts)
-        self.root_values.append(tree.root.value)
 
     @property
     def length(self):
         return len(self.rewards)
 
-    def make_targets(self, start_pos, unroll_steps, td_steps, γ):
+    def make_targets(self, start_pos, unroll_steps):
         target_p = []
-        target_v = []
         target_r = []
-        discounted_rewards = self.discounted_rewards(γ)
         for cur_idx in range(start_pos, start_pos + unroll_steps):
             if cur_idx >= len(self.rewards):
                 target_p.append([0.0] * len(self.visit_counts[0]))
-                target_v.append([0.0])
                 target_r.append([0.0])
                 continue
             target_p.append(self.visit_counts[cur_idx])
-            v = discounted_rewards[cur_idx]
-            if cur_idx + td_steps < self.length:
-                v += self.root_values[cur_idx] * (γ ** td_steps)
-            target_v.append([v])
             target_r.append([self.rewards[cur_idx]])
-        return target_p, target_v, target_r
-
-    def discounted_rewards(self, γ):
-        r = 0.0
-        ret = []
-        for cur in reversed(self.rewards):
-            r *= γ
-            r += cur
-            ret.append(r)
-        return list(reversed(ret))
+        return target_p, target_r
 
 
 class ReplayMemory:
@@ -329,14 +312,14 @@ class ReplayMemory:
         self.length = min(self.length + 1, self.maxlen)
         self.index = (self.index + 1) % self.maxlen
 
-    def sample_batch(self, unroll_steps, td_steps, γ):
+    def sample_batch(self, unroll_steps):
         games = [self.sample_game() for _ in range(self.batch_size)]
         positions = [
             (np.random.randint(0, game.length - unroll_steps)
              if game.length > unroll_steps else 0)
             for game in games
         ]
-        targets = [game.make_targets(pos, unroll_steps, td_steps, γ)
+        targets = [game.make_targets(pos, unroll_steps)
                    for (pos, game) in zip(positions, games)]
         return [
             {
@@ -345,8 +328,7 @@ class ReplayMemory:
                                                        unroll_steps),
                                     dtype=np.int32),
                 'target_p': np.array(targets[i][0]),
-                'target_v': np.array(targets[i][1]),
-                'target_r': np.array(targets[i][2]),
+                'target_r': np.array(targets[i][1]),
             }
             for i, (pos, game) in enumerate(zip(positions, games))
         ]
@@ -450,21 +432,21 @@ class Network(nn.Module):
 
     def __call__(self, x0, actions):
         p, v, h = self.initial_inference(x0)
-        ps, vs = [p], [v]
-        rs = []
+        ps, vs, v_primes, rs = [p], [v], [], []
         for i in range(actions.shape[-1]):
             a = actions[:,i]
             p, v, h, r = self.recurrent_inference(h, a)
             ps.append(p)
             vs.append(v)
+            v_primes.append(v)
             rs.append(r)
         ps.pop()
         vs.pop()
         return (jnp.stack(ps, axis=1), jnp.stack(vs, axis=1),
-                jnp.stack(rs, axis=1))
+                jnp.stack(v_primes, axis=1), jnp.stack(rs, axis=1))
 
 
-def create_train_state(net, rng, η, features, β=0.9,
+def create_train_state(net, rng, η, features, β1=0.9, β2=0.99,
                        decay_rate=LR_DECAY_RATE,
                        decay_steps=LR_DECAY_STEPS):
     params = net.init(rng,
@@ -475,7 +457,7 @@ def create_train_state(net, rng, η, features, β=0.9,
         decay_rate=decay_rate,
         transition_steps=decay_steps,
         end_value=0.0)
-    tx = optax.sgd(lr_sched, β)
+    tx = optax.adam(lr_sched, β1, β2)
     return TrainState.create(
         apply_fn=net.apply, params=params, tx=tx,
         metrics=Metrics.empty())
@@ -485,29 +467,30 @@ def preprocess_batch(env, batch):
     init_features = []
     actions = []
     target_p = []
-    target_v = []
     target_r = []
     for example in batch:
         s = example['state']
         init_features.append(env.ϕ[s])
         actions.append(example['actions'])
         target_p.append(example['target_p'])
-        target_v.append(example['target_v'])
         target_r.append(example['target_r'])
     return (np.array(init_features), np.array(actions), np.array(target_p),
-            np.array(target_v), np.array(target_r))
+            np.array(target_r))
 
 
 @jax.jit
-def train_step(state, init_features, actions, target_p, target_v, target_r,
-               c=1e-2):
+def train_step(state, init_features, actions, target_p, target_r, γ,
+               c=L2_REGULARIZER_SCALE):
+    _, v, v_prime, _ = state.apply_fn({'params': state.params},
+                                      init_features, actions)
+    dt = target_r - v + γ * v_prime
     def loss_fn(params):
-        pred_p, v, r = state.apply_fn(
+        pred_p, pred_v, _, pred_r = state.apply_fn(
             {'params': params}, init_features, actions)
         mask = jnp.expand_dims(actions != -1, axis=-1).astype(jnp.int32)
-        v_loss = jnp.mean(mask * (v - target_v) ** 2.0) ** 0.5
+        v_loss = -jnp.sum(mask * dt * pred_v)
         p_loss = -jnp.sum(target_p * jnp.log2(pred_p))
-        r_loss = jnp.mean(mask * (r - target_r) ** 2.0) ** 0.5
+        r_loss = jnp.mean(mask * (pred_r - target_r) ** 2.0) ** 0.5
         l2_loss = 0.0
         for x in jax.tree_util.tree_leaves(params):
             l2_loss += jnp.sum(x ** 2.0)
