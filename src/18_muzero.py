@@ -5,7 +5,8 @@ Implementation of MuZero
 MuZero learning static GridWorld.
 
 Value network uses TD learning instead of the MSE objective in the paper.
-Network parameters are trained using Adam and regularized with an L2 norm.
+Network parameters are trained using Adam and regularized with an L2 norm
+weight penalty.
 
 I could use Stochastic MuZero for stochastic GridWorld.
 
