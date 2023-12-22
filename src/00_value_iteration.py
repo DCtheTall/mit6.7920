@@ -3,6 +3,12 @@ Implementation of Value Iteration
 =================================
 Implementation of value iteration for 4x4 GridWorld.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ P : State-action-state transition probabilities
+ γ : Discount factor
+
 Result:
 -------
 Converged after 51 iterations

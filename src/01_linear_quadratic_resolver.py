@@ -2,6 +2,11 @@
 Example Linear Quadratic Resolver Problem
 =========================================
 
+Terms:
+ A, B : Dynamics matrices
+ Q : State cost matrix
+ R : Action cost
+
 Result:
 -------
 State feedback gains: [[0.16000626 0.4       ]]

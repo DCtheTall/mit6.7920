@@ -8,9 +8,15 @@ Value network uses TD learning instead of the MSE objective in the paper.
 Network parameters are trained using Adam and regularized with an L2 norm
 weight penalty.
 
-I could use Stochastic MuZero for stochastic GridWorld.
+The value function is probably overestimating reward because once the
+policy network learned the right path in the static environment the
+value network stopped getting signal of the negative reward.
+
+I could use Stochastic MuZero for stochastic GridWorld later on
+with a few modifications to this code.
 
 Result:
+-------
 Optimal policy:
 Action.Right	 Action.Right	 Action.Right	 Action.Right
 Action.Right	 Action.Up	 Action.Up	 Action.Right
