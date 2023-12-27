@@ -3,6 +3,14 @@ Implementation of Policy Iteration
 ==================================
 Implementation of policy iteration for 4x4 GridWorld.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ P : State-action-state transition probabilities
+ γ : Discount factor
+ V : State value function
+ π : Agent policy
+
 Result:
 -------
 Converged after 51 iterations
@@ -25,11 +33,13 @@ from util.display import print_grid
 from util.gridworld import Action, GridWorld
 
 
-def policy_iteration(S, A, R, P, V, γ):
+def policy_iteration(S, A, R, P, γ):
     """Value iteration algorithm implementation
 
     Complexity: O(S^2 * A)
     """
+    # Initialize value function
+    V = {s: 0.0 for s in S}
     # Initialize stationary policy
     π = {s: Action.Right for s in S}
     n_iter = 0
@@ -94,14 +104,11 @@ if __name__ == '__main__':
     # Rewards
     R = env.R
 
-    # Initialize value function
-    V = {s: 0.0 for s in S}
-
     # Discount factor
     γ = 0.75
 
     # Apply policy iteration
-    V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, V, γ)
+    V_opt, π_opt, n_iter = policy_iteration(S, A, R, P, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')

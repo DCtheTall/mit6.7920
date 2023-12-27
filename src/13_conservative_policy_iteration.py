@@ -9,25 +9,40 @@ https://people.eecs.berkeley.edu/~pabbeel/cs287-fa09/readings/KakadeLangford-icm
 This implementation is not model-free and requires the state-action-state
 transition matrix for the MDP.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ P : State-action-state transition probabilities
+ γ : Discount factor
+ V : State value function
+ Q : State-action value function
+ π : Agent policy
+ A_π : Advantage function of a given policy
+ d_π : Discounted future state distribution for a given policy
+ P_π : State-state transition probabilities for a given policy
+
+
 Result:
 -------
-Converged in 9429 iterations
+Converged in 10016 iterations
 Optimal policy:
 Action.Up	 Action.Up	 Action.Up	 Action.Up	
 Action.Up	 Action.Up	 Action.Left	 Action.Up	
 Action.Up	 Action.Up	 Action.Left	 Action.Down	
 Action.Up	 Action.Right	 Action.Left	 Action.Down	
 Value function for optimal policy:
-0.06824577808610179	 0.14071408908546346	 0.36629773073617006	 0.9999997610830491	
-0.04229518366033263	 0.06363758921167877	 0.08855487329895684	 -0.9999997610830498	
-0.022318357933392534	 0.027674662755099756	 0.0315890765007631	 -0.02064816966226994	
-0.011723713051034035	 0.01355651691657542	 0.014660950631112097	 0.005846208903448203
+0.07023909670130135	 0.14474694541815256	 0.3727434086970956	 0.9999996814440675	
+0.04430054417870512	 0.06687063682486848	 0.09432356482055686	 -0.9999996814440668	
+0.023647664213048265	 0.029539628954926032	 0.03384734820279023	 -0.010595444902336854	
+0.012442287458990165	 0.014303130626786715	 0.014912355859232873	 0.006767690628558583
 
 """
 
 import numpy as np
 from util.display import print_grid
 from util.gridworld import GridWorld
+
+np.random.seed(42)
 
 
 def conservative_policy_iteration(env, γ, Ɛ):

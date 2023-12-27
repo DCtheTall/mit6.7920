@@ -2,17 +2,27 @@
 Implementation of Linear Temporal Difference Learning
 =====================================================
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ λ : TD(λ) parameter, see above.
+ V : State value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+ θ : Model parameters
+
 Result:
 -------
-Converged after 34237 iterations
+Converged after 34671 iterations
 Optimal value function:
-0.6197100133372377	 0.5675408488428824	 0.47423490398675655	 1.663224340644876
-0.020777519484171503	 -0.10161313610557865	 -0.3558205875475948	 -1.6019315639454315
--0.2759446825586251	 -0.3799280613453073	 -0.4932909168900485	 -0.5543027805244976
--0.5303302432843998	 -0.5598498893459154	 -0.6060757625938406	 -0.6502573562734688
+0.6177128013971709	 0.5611515595534329	 0.4659076250681236	 1.6434627167495766	
+0.021653612098461394	 -0.10589137805841786	 -0.3637464187666175	 -1.5848980990755137	
+-0.2680605762893823	 -0.3789686317673623	 -0.50112480145532	 -0.5766327068491073	
+-0.5153089807239112	 -0.5532044507574105	 -0.6089858309794415	 -0.6643094647755023	
 Optimal parameters:
-[ 0.31952767  0.70074957  0.51959239  0.51013862  0.25749992  1.00574523
- -2.8741527   1.16939335]
+[ 0.31508458  0.68942319  0.5137557   0.50225388  0.2729931   1.0245976
+ -2.84141224  1.12146221]
 
 """
 
@@ -20,6 +30,9 @@ import numpy as np
 import random
 from util.display import print_grid
 from util.gridworld import GridWorld
+
+np.random.seed(42)
+random.seed(42)
 
 
 N_FEATURES = 8
@@ -29,7 +42,7 @@ def initialize_parameters():
     return np.zeros((N_FEATURES,))
 
 
-def ilstd(env, V, γ, λ, θ):
+def linear_td(env, V, γ, λ, θ):
     N = {s: 0.0 for s in env.S}
     π = random_policy(env.S, env.A)
     n_iter = 0
@@ -98,15 +111,14 @@ if __name__ == '__main__':
     θ = initialize_parameters()
 
     # Initialize parameterized value function
-    def V(θ, s):
-        return θ @ env.ϕ[s]
+    V = lambda θ, s: θ @ env.ϕ[s]
 
     # Discount factor
     γ = 0.75
     λ = 0.6
 
     # Approximate value function with linear TD
-    θ_opt, n_iter = ilstd(env, V, γ, λ, θ)
+    θ_opt, n_iter = linear_td(env, V, γ, λ, θ)
     V_opt = {s: V(θ_opt, s) for s in env.S}
 
     # Display results

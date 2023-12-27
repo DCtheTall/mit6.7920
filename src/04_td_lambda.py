@@ -5,14 +5,22 @@ Implments TD(λ) for 4x4 Frozen Lake MDP.
 If you set λ=0, then this becomes TD(0).
 If you set λ=1, then this becomes Monte Carlo value iteration.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ λ : TD(λ) parameter, see above.
+ V : State value function
+ π : Agent policy
+
 Result:
 -------
-Converged after 16006 iterations
+Converged after 22029 iterations
 Optimal value function:
-0.033723677017174	 0.13119574526971972	 0.6235409823432285	 3.598167796718273
-0.0032197997971012207	 -0.01132062236114739	 -0.16839340098596253	 -3.680209919662842
--0.005925147282414969	 -0.029736214449579194	 -0.14119541625028553	 -0.7290011110784664
--0.00648537028429082	 -0.022989353956549052	 -0.08229763495664257	 -0.26665364084401494
+-0.0016352802220612926	 0.023697866371326762	 0.29717431930371757	 3.6294914824661295	
+-0.018186379847187788	 -0.08588570203442387	 -0.6776627981836699	 -3.7045548287999135	
+-0.013380220025547724	 -0.045733345466611265	 -0.21421901527002882	 -0.6220527256181357	
+-0.008149942776048804	 -0.022257505972251172	 -0.0784547448295287	 -0.16726770998643875
 
 """
 
@@ -21,8 +29,13 @@ import random
 from util.display import print_grid
 from util.gridworld import GridWorld
 
+random.seed(42)
+np.random.seed(42)
 
-def td_lambda(env, V, γ, λ):
+
+def td_lambda(env, γ, λ):
+    # Initialize value function
+    V = {s: 0.0 for s in env.S}
     π = random_policy(env.S, env.A)
     # State update counter, used for learning rate
     N = {}
@@ -83,15 +96,12 @@ def temporal_difference(V, R, γ, s, s_prime):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Initialize value function
-    V = {s: 0.0 for s in env.S}
-
     # Discount factor
     γ = 0.75
     λ = 0.6
 
     # Apply TD(λ) iteration
-    V_opt, n_iter = td_lambda(env, V, γ, λ)
+    V_opt, n_iter = td_lambda(env, γ, λ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')

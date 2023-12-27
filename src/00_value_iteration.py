@@ -8,6 +8,7 @@ Terms:
  A : Set of all actions
  P : State-action-state transition probabilities
  γ : Discount factor
+ V : State value function
 
 Result:
 -------

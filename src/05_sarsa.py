@@ -9,15 +9,22 @@ SARSA is an on-policy learning algorithm, meaning that it uses the
 same policy during exploration as it does for selecting the next
 action for temporal difference learning.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ P : State-action-state transition probabilities
+ γ : Discount factor
+ Q : State-action value function
+ π : Agent policy
+
 Result:
 -------
-Converged after 127652 iterations
+Converged after 129660 iterations
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Right
-Action.Left	 Action.Left	 Action.Left	 Action.Up
-Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Left	
+Action.Left	 Action.Left	 Action.Left	 Action.Up	
+Action.Left	 Action.Left	 Action.Left	 Action.Down	
 Action.Left	 Action.Left	 Action.Down	 Action.Down
-Best first action: Action.Left
 
 """
 
@@ -25,8 +32,12 @@ import numpy as np
 from util.display import print_grid
 from util.gridworld import GridWorld
 
+np.random.seed(42)
 
-def sarsa(env, Q, γ):
+
+def sarsa(env, γ):
+    # Initialize Q function
+    Q = {(s, a): 0.0 for s in env.S for a in env.A}
     t = 0
     N = {s: 0.0 for s in env.S}
     while True:
@@ -99,14 +110,11 @@ def optimal_policy(S, A, Q):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Initialize Q function
-    Q = {(s, a): 0.0 for s in env.S for a in env.A}
-
     # Discount factor
     γ = 0.75
 
     # Apply SARSA
-    Q_opt, n_iter = sarsa(env, Q, γ)
+    Q_opt, n_iter = sarsa(env, γ)
 
     # Optimal policy
     π_opt = optimal_policy(env.S, env.A, Q_opt)

@@ -4,14 +4,25 @@ Implementation of Temporal Difference Learning
 This module implements the TD(0) temporal difference learning
 algorithm on 4x4 GridWorld.
 
+This is the first example of a model-free algorithm since
+it does not need to know the state-action-state transition
+probabilities.
+
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ V : State value function
+ π : Agent policy
+
 Result
 ------
-Converged after 51532 iterations
+Converged after 46881 iterations
 Optimal value function:
-0.03558420452683908	 0.14553204326752067	 0.7271529252075338	 3.7006573199626747
--0.020292473258783614	 -0.1059785980464522	 -0.628945325113153	 -3.761018316313923
--0.026037622223322402	 -0.08964090980207229	 -0.3308251262508127	 -0.9794353779104628
--0.018588630231807134	 -0.05159745004991679	 -0.14571617209109242	 -0.31172628783363315
+0.021579184136287444	 0.12948176959259905	 0.7126360689559769	 3.693637870689115	
+-0.030275064893229415	 -0.11845293519983191	 -0.6384552031075401	 -3.755284825452571	
+-0.03240013047460124	 -0.09668898617234213	 -0.335087540331132	 -0.9802221769218665	
+-0.023149037932043984	 -0.05671401659967302	 -0.1507542748053437	 -0.31537988832232666
 
 """
 
@@ -20,8 +31,13 @@ import random
 from util.display import print_grid
 from util.gridworld import GridWorld
 
+random.seed(42)
+np.random.seed(42)
 
-def td0_estimator(env, V, γ):
+
+def td0_estimator(env, γ):
+    # Initialize value function
+    V = {s: 0.0 for s in env.S}
     N = {s: 0.0 for s in env.S}
     π = random_policy(env.S, env.A)
     n_iter = 0
@@ -82,14 +98,11 @@ def temporal_difference(V, R, γ, s, s_prime):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Initialize value function
-    V = {s: 0.0 for s in env.S}
-
     # Discount factor
     γ = 0.75
 
     # Apply TD(0) iteration
-    V_opt, n_iter = td0_estimator(env, V, γ)
+    V_opt, n_iter = td0_estimator(env, γ)
 
     # Display results
     print('Converged after', n_iter, 'iterations')
