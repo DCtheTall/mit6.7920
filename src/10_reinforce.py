@@ -2,15 +2,22 @@
 Implementation of REINFORCE Policy Gradient Algorithm
 =====================================================
 Implementation of REINFORCE policy gradient learning algorithm
-for GridWorld 4x4.
+for stochastic GridWorld 4x4.
+
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ π : Agent policy
+ ϕ : Non-linear features from environment
 
 Result:
 -------
 Optimal policy:
 Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Up	 Action.Left	 Action.Left	 Action.Up
-Action.Left	 Action.Left	 Action.Left	 Action.Down
-Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Left	 Action.Up
+Action.Up	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Left	 Action.Left	 Action.Down
 
 """
 
@@ -24,14 +31,15 @@ from util.display import print_grid
 from util.jax import MLP, Metrics, TrainState
 from util.gridworld import GridWorld
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
 N_FEATURES = 8
 N_ACTIONS = 4
-LEARNING_RATE = 1e-2
+LEARNING_RATE = 5e-3
 N_TRAJECTORIES_PER_UPDATE = 100
-TRAIN_STEPS = 75
+TRAIN_STEPS = 100
 
 
 def reinforce(env, γ, T=100):
@@ -141,9 +149,7 @@ def policy_gradient(state, r, x, a_idx):
             lambda: jnp.sum(jnp.log(1.0 - a)),
             lambda: -jnp.sum(jnp.log(a)),
         )
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(state.params)
-    return grads
+    return jax.grad(loss_fn)(state.params)
 
 
 def optimal_policy(state, S, A, ϕ):

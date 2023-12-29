@@ -11,7 +11,6 @@ the largest Q-value.
 Terms:
  S : Set of all states in the MDP
  A : Set of all actions
- P : State-action-state transition probabilities
  γ : Discount factor
  Q : State-action value function
  π : Agent policy
@@ -20,10 +19,10 @@ Result:
 -------
 Converged after 61778 iterations
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Left	
-Action.Up	 Action.Left	 Action.Left	 Action.Down	
-Action.Left	 Action.Left	 Action.Left	 Action.Down	
-Action.Left	 Action.Left	 Action.Left	 Action.Down	
+Action.Up	 Action.Up	 Action.Up	 Action.Left
+Action.Up	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
 Best first action: Action.Left
 
 """

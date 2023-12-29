@@ -3,63 +3,71 @@ Implementation of Deep Q Network (DQN)
 ======================================
 This file implements a simple DQN for 4x4 GridWord using JAX.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ Q : State-action value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Up	 Action.Up	 Action.Left	 Action.Up
 Action.Up	 Action.Up	 Action.Up	 Action.Down
-Action.Up	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Up	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Down
 Loss:
-0.6033509142502013
-0.024827079457217634
-0.12312317844911444
-0.5869663645411252
-0.6630905703503154
-0.7734383597456392
-0.7216847927385729
-0.6343053951178764
-0.02636962941571541
-0.01629512498073732
-1.0309935507979453
-0.746993019839786
-0.1594837666990678
-0.18346446367961525
-0.48158267895374096
-0.7886761432468407
-0.756206691240497
-0.028250660716155864
-0.09218173814059989
-0.20873912809311904
-0.15281865598540997
-0.6453047087332597
-0.5729455588776085
-0.19968222636200397
+0.09837667645285342
+0.024259106004846934
+0.20560177820837203
+0.12454563549211055
+0.05048012006675039
+0.07063332656072561
+0.6746466000825653
+0.03936031800695298
+1.0287288830202295
+0.9901639891380645
+0.03281494940642786
+0.7560352416772905
+0.7372656499670506
+0.05857080928047406
+0.05478226831335386
+0.994834852671184
+0.7257816921327673
+0.02460199999905446
+0.7731788929957454
+0.7612781936867613
+0.10408999945248414
+0.15926403627349864
+0.5969392490883717
+0.19961606203288013
 Avg. Q Value:
-0.1648217036218988
-0.025058447516828314
-0.18483667264152312
--4.470097605902977e-05
-0.010941969107091349
-0.013580140157612598
-0.024024291421337315
--0.21922145261461146
--0.25803499034683286
--0.0037664343507158053
-0.028254373644340917
-0.036165262739584564
-0.08429375666505479
-0.09272074044304046
-0.08870024687281747
-0.15491103393540007
-0.11192862573727966
-0.2800735487471657
-0.8471766196925983
-0.3461497105193604
-0.30376128489395426
-0.21173183002682125
-0.5385737263303318
-0.05439975564499128
+0.03694848685157846
+0.016099111000463264
+0.026965605591955624
+-0.0013268780308484537
+0.006085647053423446
+-0.0048228657512535186
+-0.253955071023358
+0.00488133300225339
+0.007242436308576877
+0.2669627213107676
+-0.009210942264563095
+0.008629390740998492
+0.03381724654410704
+0.030749199254625575
+0.024439755256650895
+0.0018401585618865143
+0.04431223552736668
+0.02458546654349173
+0.0314222024174388
+-0.023693785109783157
+0.006930710133247096
+0.07947378456447393
+0.1822948483257617
+0.10385233559941498
 
 """
 
@@ -76,6 +84,7 @@ from util.display import print_grid
 from util.jax import MLP, Metrics
 from util.gridworld import GridWorld
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
@@ -91,27 +100,6 @@ EPSILON_DECAY_STEPS = 15000
 LOG_N_STEPS = 1000
 COPY_N_STEPS = 250
 N_ACTIONS = 4
-
-
-def features(env):
-    """Extract features for linear TD"""
-    ϕ = {}
-    for s in env.S:
-        x, y = s
-        xg, yg = env.goal
-        xf, yf = env.failure
-        l2_goal = ((x - xg) ** 2 + (y - yg) ** 2) ** 0.5
-        l2_fail = ((x - xf) ** 2 + (y - yf) ** 2) ** 0.5
-        ϕ[s] = np.array([
-            float(x), float(y), # position
-            (x ** 2.0 + y ** 2.0) ** 0.5, # L2 distance from origin
-            float(x + y), # L1 norm from origin
-            float(abs(x - xg) + abs(y - yg)), # L1 distance from goal
-            float(abs(x - xf) + abs(y - yf)), # L1 distance from failure
-            0.0 if s == env.goal else np.arccos((y - yg) / l2_goal), # angle wrt goal
-            0.0 if s == env.failure else np.arccos((y - yf) / l2_fail), # angle wrt failure
-        ], dtype=np.float64)
-    return ϕ
 
 
 def train_dqn(env, γ, ϕ, ddqn=False):
@@ -248,8 +236,7 @@ def train_step(state, X_batch, a_batch, q_target):
         q_pred *= nn.one_hot(a_batch, N_ACTIONS)
         q_pred = jnp.sum(q_pred, axis=-1)
         return rmse(q_pred, q_target)
-    grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(state.params)
+    grads = jax.grad(loss_fn)(state.params)
     state = state.apply_gradients(grads=grads)
     return state
 
@@ -288,14 +275,11 @@ def print_metric_history(history, metric):
 if __name__ == '__main__':
     env = GridWorld(size=4)
 
-    # Non-linear features
-    ϕ = features(env)
-
     # Discount factor
     γ = 0.75
 
-    opt_state, metrics_history = train_dqn(env, γ, ϕ, ddqn=True)
-    π_opt = optimal_policy(opt_state, env.S, env.A, ϕ)
+    opt_state, metrics_history = train_dqn(env, γ, env.ϕ, ddqn=True)
+    π_opt = optimal_policy(opt_state, env.S, env.A, env.ϕ)
 
     print('Optimal policy:')
     print_grid(π_opt)
