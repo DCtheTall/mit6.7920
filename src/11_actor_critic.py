@@ -3,18 +3,26 @@ Implementation of Actor-Critic
 ==============================
 This file implements vanilla Actor-Critic using shared neural network parameters.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ Q : State-action value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+
 Result
 ------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Up	 Action.Up
-Action.Right	 Action.Left	 Action.Left	 Action.Up
-Action.Right	 Action.Left	 Action.Left	 Action.Left
-Action.Left	 Action.Left	 Action.Down	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Right
+Action.Up	 Action.Left	 Action.Left	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Left	 Action.Down	 Action.Down
 Optimal value function:
--0.03112135760389087	 0.10344834818970625	 0.5451181988821525	 3.0138634597440133
--0.10704065685146072	 -0.18896280033908242	 -0.5824610558410647	 -3.5266901499145016
--0.11360189274718419	 -0.12469312926508602	 -0.34530864324210797	 -0.7838656799673911
--0.06512651577935008	 -0.09940462696564284	 -0.11933076221612815	 -0.3358757887512751
+0.05547957750818869	 0.09679753546955988	 0.349915101235855	 2.7741836203542753
+-0.09539952916895389	 -0.2228283860463518	 -0.7845030576699474	 -3.692328350054204
+-0.0774243971347982	 -0.19235196919886166	 -0.483701472415494	 -0.9912019012305577
+-0.033861328623924575	 -0.11558709175320808	 -0.27065158535773737	 -0.4871237806125439
 
 """
 
@@ -26,6 +34,7 @@ from util.display import print_grid
 from util.jax import MLP, create_sgd_train_state
 from util.gridworld import GridWorld
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 

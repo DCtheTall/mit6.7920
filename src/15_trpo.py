@@ -20,13 +20,24 @@ This algorithm trains for the same number of steps as NPG but
 has a significantly faster wall clock time due to the speed
 improvements.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ λ : TD(λ) parameter
+ V : State value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+ F : Fisher information matrix
+ δ : Trust region size parameter
+
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Right	 Action.Right
-Action.Up	 Action.Up	 Action.Left	 Action.Up
-Action.Left	 Action.Left	 Action.Left	 Action.Left
-Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Right	 Action.Right	 Action.Right	 Action.Right
+Action.Right	 Action.Right	 Action.Left	 Action.Left
+Action.Right	 Action.Right	 Action.Left	 Action.Left
+Action.Right	 Action.Right	 Action.Right	 Action.Left
 
 """
 
@@ -38,6 +49,7 @@ from util.gridworld import GridWorld
 from util.display import print_grid
 from util.jax import MLP, create_sgd_train_state
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
@@ -45,7 +57,7 @@ N_FEATURES = 8
 N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_HIDDEN_LAYERS = 2
 N_ACTIONS = 4
-TRAIN_STEPS = 100
+TRAIN_STEPS = 200
 N_TRAJECTORIES_PER_STEP = 10
 N_VALUE_ESTIMATE_ITERATIONS = 100
 MAX_STEPS_PER_TRAJECTORY = 100
@@ -330,7 +342,7 @@ if __name__ == '__main__':
     λ = 0.6
 
     # Trust region size
-    δ = 1.0
+    δ = 5.0
 
     π_state = trpo(env, γ, λ, δ)
     π_opt = optimal_policy(π_state, env.S, env.A, env.ϕ)

@@ -17,13 +17,23 @@ product of gradients over all samples.
 This algorithm is able to converge to a decent policy after just 1,000
 trajectories, less than 20% of what REINFORCE required.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ λ : TD(λ) parameter
+ V : State value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+ F : Fisher information matrix
+
 Result:
 -------
 Optimal policy:
 Action.Up	 Action.Up	 Action.Up	 Action.Down
-Action.Up	 Action.Left	 Action.Left	 Action.Left
 Action.Left	 Action.Left	 Action.Left	 Action.Left
-Action.Left	 Action.Left	 Action.Left	 Action.Left
+Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Down	 Action.Down
 
 """
 
@@ -35,6 +45,7 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 from util.jax import MLP, create_sgd_train_state
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 

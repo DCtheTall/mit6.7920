@@ -21,6 +21,7 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 from util.jax import MLP, Metrics, TrainState
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
@@ -29,7 +30,7 @@ N_HIDDEN_FEATURES = 4 * N_FEATURES
 N_HIDDEN_LAYERS = 2
 N_ACTIONS = 4
 LEARNING_RATE = 1e-3
-TRAIN_STEPS = 100
+TRAIN_STEPS = 200
 N_TRAJECTORIES_PER_STEP = 10
 N_VALUE_ESTIMATE_ITERATIONS = 100
 MAX_STEPS_PER_TRAJECTORY = 100

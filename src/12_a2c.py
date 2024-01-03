@@ -8,18 +8,27 @@ A2C was invented after Asynchronous Advantage Actor-Critic
 (aka A3C), and is found to be just as good for learning
 and more data efficient than A3C.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ γ : Discount factor
+ λ : TD(λ) parameter
+ V : State value function
+ π : Agent policy
+ ϕ : Non-linear features from environment
+
 Result:
 -------
 Optimal policy:
-Action.Up	 Action.Up	 Action.Down	 Action.Down
-Action.Left	 Action.Left	 Action.Left	 Action.Down
+Action.Up	 Action.Up	 Action.Up	 Action.Up
+Action.Left	 Action.Left	 Action.Left	 Action.Up
 Action.Left	 Action.Left	 Action.Left	 Action.Down
 Action.Left	 Action.Left	 Action.Left	 Action.Left
 Optimal value function:
--0.24725349974234986	 -0.08145740584122518	 0.42139891590555445	 2.554816192694035
--0.3817363674729299	 -0.40616133199433485	 -0.7857642737751733	 -4.174560193698902
--0.38620141797720287	 -0.40257019105638125	 -0.5752793719865422	 -1.1547905627224417
--0.3651403501054477	 -0.40294576413652916	 -0.5105077772981813	 -0.8728789968697053
+0.5238001840115953	 0.8799979330596879	 1.9113985602301307	 4.66491107101484
+0.31561998054026197	 0.31327909954855193	 0.28295538033172923	 -2.484390704087845
+0.320440864175609	 0.28408840288008597	 0.2138547408749994	 -0.12714796397518977
+0.3256289526138021	 0.2771504047454013	 0.22184581540091458	 0.16953737634988558
 
 """
 
@@ -27,11 +36,11 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 from util.display import print_grid
 from util.jax import MLP, create_sgd_train_state
 from util.gridworld import GridWorld
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
@@ -39,9 +48,9 @@ N_FEATURES = 8
 N_ACTIONS = 4
 N_HIDDEN_LAYERS = 2
 N_HIDDEN_FEATURES = 4 * N_FEATURES
-ACTOR_LEARNING_RATE = 1e-2
+ACTOR_LEARNING_RATE = 5e-3
 CRITIC_LEARNING_RATE = 1e-2
-N_TRAJECTORIES = 750
+N_TRAJECTORIES = 1000
 
 
 def a2c(env, γ, λ, T=100):
