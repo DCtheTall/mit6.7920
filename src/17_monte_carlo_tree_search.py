@@ -14,24 +14,36 @@ V[s] = sum(π(a | s) * Q(s, a))
 where π is a softmax policy using each state-action's Q-value.
 The final policy displayed chooses the action which maximizes the Q-value.
 
+Terms:
+ S : Set of all states in the MDP
+ A : Set of all actions
+ R : Reward function
+ γ : Discount factor
+ V : State value function
+ Q : State-action value function
+ π : Agent policy
+
+
 Result:
 -------
 Optimal value function:
--0.27408764121410484	 -0.17437915213263658	 0.12876349788010008	 1.0
--0.38885876795797336	 -0.3713295360048853	 -0.4599398521544408	 -1.0252759899406472
--0.44809516010401323	 -0.489196818690537	 -0.5373703759940026	 -0.7304696456246579
--0.483561231711909	 -0.5069863489473597	 -0.5731413327533	 -0.6805037640122068
+-0.25171246818913967	 -0.1009042245721357	 0.19878869372295796	 1.0
+-0.31412406347088373	 -0.35864869920314807	 -0.40373236794589107	 -1.011183208370817
+-0.3925497788050006	 -0.42624533606110376	 -0.5063655363045018	 -0.7083493531707351
+-0.43107181034075226	 -0.46753220273203455	 -0.533413928971729	 -0.6295088675399246
 Optimal policy:
 Action.Up	 Action.Up	 Action.Up	 Action.Up
 Action.Up	 Action.Up	 Action.Left	 Action.Left
-Action.Up	 Action.Up	 Action.Left	 Action.Down
-Action.Up	 Action.Left	 Action.Left	 Action.Up
+Action.Right	 Action.Left	 Action.Left	 Action.Down
+Action.Left	 Action.Left	 Action.Left	 Action.Down
 
 """
 
 import numpy as np
 from util.display import print_grid
 from util.gridworld import GridWorld
+
+np.random.seed(42)
 
 
 N_STEPS = 30000
