@@ -19,14 +19,14 @@ Result:
 -------
 Optimal policy:
 Action.Right	 Action.Right	 Action.Right	 Action.Right
-Action.Right	 Action.Up	 Action.Up	 Action.Right
-Action.Up	 Action.Up	 Action.Up	 Action.Left
-Action.Up	 Action.Right	 Action.Down	 Action.Down
+Action.Right	 Action.Right	 Action.Up	 Action.Right
+Action.Right	 Action.Up	 Action.Up	 Action.Up
+Action.Up	 Action.Up	 Action.Up	 Action.Right
 Optimal value function:
-0.33188821997616236	 0.3800520373255142	 0.42502627268711124	 0.4472067461165279
-0.22278647244949368	 0.2469505145776092	 0.2688419338052558	 0.3817005932789591
-0.10093123496615979	 0.11653650167041306	 0.1276269697259923	 0.11888388885939849
-0.05894372760573408	 0.058283115424510964	 0.06492226568457657	 0.07028869392155321
+0.4916034339322204	 0.5556386502787605	 0.6511600099715094	 0.7895046780892916
+0.3155474101366118	 0.3523649071830326	 0.39084833433459704	 0.5296871682179126
+0.17573819967148452	 0.1927120117884131	 0.2037824358637434	 0.17225328964000647
+0.159968855695437	 0.1634988643021394	 0.1661087814050517	 0.16828771931988046
 
 """
 
@@ -39,6 +39,7 @@ from util.display import print_grid
 from util.gridworld import GridWorld
 from util.jax import MLP, Metrics, TrainState
 
+np.random.seed(42)
 jax.config.update('jax_enable_x64', True)
 
 
