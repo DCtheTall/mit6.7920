@@ -7,24 +7,24 @@ The algorithms that require training neural networks use [JAX](https://github.co
 
 ## Algorithms Covered:
 
-- Value Iteration
-- Linear Quadratic Resolver (LQR)
-- Policy Iteration
-- Temporal Difference Learning
-- TD(λ)
-- SARSA
-- Q-Learning
-- Linear Temporal Difference Learning (Linear TD)
-- Least Squares Temporal Difference Learning (LSTD)
-- Deep Q-Networks (DQN) and Double DQN (DDQN)
-- REINFORCE
-- Actor-Critic
-- Actor Critic with Advantage (A2C)
-- Conservative Policy Iteration
-- Trust Region Policy Optimization (TRPO)
-- Proximal Policy Optimization (PPO)
-- Monte Carlo Tree Search
-- MuZero
+- [Value Iteration](https://web.mit.edu/6.7920/www/lectures/L4-2023fa.pdf)
+- [Linear Quadratic Resolver (LQR)](https://web.mit.edu/6.7920/www/lectures/L3-2023fa.pdf)
+- [Policy Iteration](https://web.mit.edu/6.7920/www/lectures/L4-2023fa.pdf)
+- [Temporal Difference (TD) Learning](https://web.mit.edu/6.7920/www/lectures/L7-2023fa.pdf)
+- [TD(λ) with Eligibility Traces](https://web.mit.edu/6.7920/www/lectures/L7-2023fa.pdf)
+- [State-Action-Reward-State-Action (SARSA)](https://web.mit.edu/6.7920/www/lectures/L8-2023fa.pdf)
+- [Q-Learning](https://web.mit.edu/6.7920/www/lectures/L8-2023fa.pdf)
+- [Linear Temporal Difference Learning (Linear TD)](https://web.mit.edu/6.7920/www/lectures/L10-2023fa.pdf)
+- [Least Squares Temporal Difference Learning (LSTD)](https://web.mit.edu/6.7920/www/lectures/L10-2023fa.pdf)
+- [Deep Q-Networks (DQN) and Double DQN (DDQN)](https://web.mit.edu/6.7920/www/lectures/L10-2023fa.pdf)
+- [REINFORCE](https://web.mit.edu/6.7920/www/lectures/L12-2023fa.pdf)
+- [Actor-Critic](https://web.mit.edu/6.7920/www/lectures/L12-2023fa.pdf)
+- [Actor Critic with Advantage (A2C)](https://web.mit.edu/6.7920/www/lectures/L12-2023fa.pdf)
+- [Conservative Policy Iteration](https://web.mit.edu/6.7920/www/lectures/L13-2023fa.pdf)
+- [Trust Region Policy Optimization (TRPO)](https://web.mit.edu/6.7920/www/lectures/L13-2023fa.pdf)
+- [Proximal Policy Optimization (PPO)](https://web.mit.edu/6.7920/www/lectures/L13-2023fa.pdf)
+- [Monte Carlo Tree Search](https://web.mit.edu/6.7920/www/lectures/L15-2023fa.pdf)
+- [MuZero](https://web.mit.edu/6.7920/www/lectures/L15-2023fa.pdf)
 
 ## License
 
